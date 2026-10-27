@@ -1,31 +1,41 @@
-// Where each set piece sits on the line. Pieces and the shot list both read
-// these, so a piece can move without the camera losing it.
+// Where each set piece sits relative to the line. Pieces, the shot list and
+// the clearance check all read these, so a piece can move without the camera
+// losing it and without the line ever passing through anything solid.
 import * as THREE from 'three';
 import { posAtS, S_OF } from './curve.js';
-import { HEAD_KEYS } from './story.js';
+import { NODE } from './story.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const at = (s, dx = 0, dy = 0, dz = 0) => posAtS(s).add(V(dx, dy, dz));
-const S = S_OF;
+const node = (id, dx = 0, dy = 0, dz = 0) => posAtS(NODE[id]).add(V(dx, dy, dz));
 
-// the head's arc position during each dwell (the key that opens the dwell)
-const keyS = (b) => HEAD_KEYS.find((k) => Math.abs(k[0] - b) < 1e-6)[1];
-
+// Boards stand entirely in front of the line (+z): the line runs behind their
+// far edge and the parked head hovers just above it, as in the reference.
+const CHESS_HALF = 5.55, GO_HALF = 6.13;
 export const L = {
-  shannon: { center: at(0) },
-  deepblue: { center: at(S.deepblue, 0, -2.4, 3.4), size: 10 },
-  alphago: { center: at(S.alphago, 0, -1.1, 4.4), size: 12 },  // Move 37 sits at center + (3.1, 0, 0)
-  imo24: { head: at(keyS(10.0) + 0.4), center: null, size: [13, 17] },
-  imo25: { A: at(keyS(14.05) + 1.5) },
-  erdos: { center: at(S.erdos) },
-  jacobian: { center: at(S.jacobian, 0, 2, 0) },
-  percolation: { center: at(S.percolation) },
-  navier: { center: at(S.navier, 0, 1, 0) },
-  papers: { center: at(S.papers, 0, 6, 0) },
-  yangmills: { center: at(S.yangmills, 0, 1, 0) },
-  eth: { root: at(S.yangmills + 8), top: at(S_OF.eth) },
+  shannon: { center: node('shannon') },
+  deepblue: { node: node('deepblue'), center: node('deepblue', 0, -2.0, 1.05 + CHESS_HALF), half: CHESS_HALF },
+  alphago: { node: node('alphago'), center: node('alphago', 0, -1.0, 1.2 + GO_HALF), half: GO_HALF },
+  imo24: { head: node('imo24'), center: null },
+  imo25: { A: node('imo25') },
+  erdos: { center: node('erdos') },
+  jacobian: { center: posAtS(S_OF.jacobian).add(V(0, 2, 0)) },
+  percolation: { center: posAtS(S_OF.percolation), node: node('percolation') },
+  navier: { center: node('navier', 0, 1, 0) },
+  papers: { center: node('papers', 0, 6, 0) },
+  yangmills: { center: node('yangmills', 0, 1, 0) },
+  eth: { root: node('eth'), top: posAtS(NODE.top) },
 };
-// the Lean card stands just above the head's dwell point (the head sits in its input line)
+// the Lean card stands just above the parked head (which sits in its input line)
 L.imo24.center = L.imo24.head.clone().add(V(0, 7.2, 0));
 L.eth.center = L.eth.root.clone().lerp(L.eth.top, 0.5);
-L.alphago.move37 = L.alphago.center.clone().add(V(3.1, 0, 0));
+L.alphago.move37 = L.alphago.center.clone().add(V(3.1, 0, 0));        // GO_MOVES[36] = B (14, 9)
+L.deepblue.king = L.deepblue.center.clone().add(V(-1.875, 0, -4.375)); // black king on c8
+
+// Solid volumes the line must never enter (checked by tools/check_clearance.mjs)
+const box = (name, c, hx, y0, y1, hz) => ({ name, min: V(c.x - hx, c.y + y0, c.z - hz), max: V(c.x + hx, c.y + y1, c.z + hz) });
+export const SOLIDS = [
+  box('chess board', L.deepblue.center, CHESS_HALF, -0.5, 0, CHESS_HALF),
+  box('chess pieces', L.deepblue.center, 5.0, 0, 2.0, 5.0),
+  box('go board', L.alphago.center, GO_HALF, -1.6, 0, GO_HALF),
+  box('go stones', L.alphago.center, GO_HALF, 0, 0.35, GO_HALF),
+];

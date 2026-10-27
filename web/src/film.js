@@ -3,9 +3,9 @@
 // function of the bar b, so frames render in any order and in parallel.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { FPS, BAR, N_BARS, FRAMES, barOfFrame, wrap, clamp, smoothstep, feature, hitEnv, window_ } from './time.js';
+import { FPS, BAR, N_BARS, FRAMES, barOfFrame, wrap, clamp, smoothstep } from './time.js';
 import { S_OF, S_END, posAtS, P_OF, xOfYear } from './curve.js';
-import { headSAt, activeMilestone, dateAt, WINDOWS, CREDIT } from './story.js';
+import { headSAt, activeMilestone, dateAt, WINDOWS, CREDIT, HOLDS } from './story.js';
 import { MILESTONES } from './data.js';
 import { Rig } from './camera.js';
 import { shotKeys } from './shots.js';
@@ -15,6 +15,7 @@ import { Space } from './world/space.js';
 import { Post } from './gfx/post.js';
 import { HUD } from './hud/hud.js';
 import { buildPieces } from './pieces/index.js';
+import { SOLIDS } from './layout.js';
 
 const TITLE_RATE = 30;     // characters per second while typing
 
@@ -36,7 +37,8 @@ export class Film {
     scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environmentIntensity = 0.22;      // applies to every PBR material (material.envMapIntensity is ignored for scene.environment)
 
-    this.fog = new THREE.Fog(0xb4c6dc, 40, 400);
+    this.fog = new THREE.Fog(0xffffff, 40, 400);
+    this.fog.color.setRGB(0.27, 0.385, 0.70, THREE.LinearSRGBColorSpace);   // = the sky's horizon haze
     this.space = new Space();
     this.trail = new Trail();
     this.head = new Head();
@@ -46,25 +48,33 @@ export class Film {
 
     this.headAt = (b) => posAtS(headSAt(b));
     this.rig = new Rig(shotKeys(), this.headAt, { aspect: width / height });
-    for (const p of this.pieces) if (p.cameraPath) this.rig.addPath(p.cameraPath);
+    for (const p of this.pieces) if (p.buildCamera) for (const path of p.buildCamera(this.rig)) this.rig.addPath(path);
     this.post = new Post(r, width, height, { msaa });
     this.hud = new HUD(width, height, r);
     this.prevVP = new THREE.Matrix4();
     this.stats = {};
+    this.solids = SOLIDS;          // for tools/check_motion.mjs
   }
 
-  // ---- look: exposure, flashes, bloom, CA, driven by cues and the music
+  // ---- look. Steady: no per-beat exposure, fringe or zoom kicks (they read as
+  // shake). Only a handful of designed, smooth light swells on story events.
   look(b) {
-    const low = feature('low', b);
-    const hit = hitEnv(b, { min: 0.8, decay: 9 });
-    // short exposure kicks: ~0.1 bar, so they read as hits, not as a grey veil
-    const flashAt = (b0, a, k = 1) => (wrap(b - b0) < 0.5 ? a * Math.exp(-wrap(b - b0) * 40 * k) * (1 - Math.exp(-wrap(b - b0) * 400)) : 0);
-    const flash = Math.max(flashAt(2.0, 0.18), flashAt(26.0, 1.2, 0.6), flashAt(29.0, 0.9, 0.7), flashAt(31.5, 0.9, 0.8), flashAt(36.0, 0.14), flashAt(36.25, 0.14));
+    // exposure swells (multiply the image, never lift the blacks into a grey veil)
+    const swell = (b0, a, len) => { const d = wrap(b - b0); return d < len ? a * smoothstep(0, 0.03, d) * (1 - smoothstep(0.03, len, d)) : 0; };
+    const boost = swell(2.0, 0.35, 0.35) + swell(26.0, 0.25, 0.4) + swell(31.5, 0.7, 0.4) + swell(36.0, 0.2, 0.25) + swell(36.25, 0.2, 0.25);
     const world = this.worldWeight(b);
     return {
-      uExposure: 1.0 + 0.12 * hit, uBloom: 0.045 + 0.015 * low, uCA: 0.0025 + 0.004 * hit, uHudCA: 1.4 + 2.0 * hit,
-      uGrain: 0.028, uVignette: 0.32 * (1 - world * 0.5), uFlash: flash, uFlashColor: [1, 0.98, 0.95], uFade: 1, uSat: 1, uLift: 0,
+      uExposure: 1.0 + boost, uBloom: 0.05, uCA: 0.0025, uHudCA: 1.4,
+      uGrain: 0.028, uVignette: 0.32 * (1 - world * 0.5), uFlash: swell(31.5, 0.03, 0.2), uFlashColor: [1, 0.98, 0.95], uFade: 1, uSat: 1, uLift: 0,
     };
+  }
+
+  // the head glows up once when it arrives at a node, then rests; no beat pulse
+  headPx(b) {
+    b = wrap(b);
+    let g = 0;
+    for (const [, a] of HOLDS) { const d = b - a; if (d >= 0 && d < 0.6) g = Math.max(g, (1 - Math.exp(-d * 40)) * Math.exp(-d * 6)); }
+    return 44 + 16 * g;
   }
 
   worldWeight(b) {
@@ -77,8 +87,7 @@ export class Film {
     b = wrap(b);
     const headS = headSAt(b);
     const headPos = posAtS(headS);
-    const punch = 2.2 * hitEnv(b, { min: 0.9, decay: 7 });
-    const cam = this.rig.apply(b, { punch, ...(this.shakeAt ? this.shakeAt(b) : {}) });
+    const cam = this.rig.apply(b);
     const world = this.worldWeight(b);
     const ctx = { b, headS, headPos, camera: cam, res: this.res, world, film: this };
     // inside the island world: daylight haze
@@ -91,18 +100,22 @@ export class Film {
     const distToHead = cam.position.distanceTo(headPos);
     this.trail.update({ headS, camera: cam, res: this.res, gain: 1, redLen: Math.max(3, distToHead * 0.14) });
     const headGain = this.headGain ? this.headGain(b) : 1;
-    this.head.update({ pos: headPos, res: this.res, px: 44 * (1 + 0.18 * feature('low', b)) + 30 * hitEnv(b, { min: 1.2, decay: 5 }), gain: headGain });
+    this.head.update({ pos: headPos, res: this.res, px: this.headPx(b), gain: headGain });
     for (const p of this.pieces) p.update(b, ctx);
     this.ctx = ctx;
     return cam;
   }
 
+  // motion-blur sub-samples from the camera's screen speed. Taken as the maximum
+  // over +-2 frames so neighbouring frames never flip between sharp and blurred.
   blurSamples(b) {
     const db = 0.5 / FPS / BAR;          // 180-degree shutter
-    const sp = this.rig.speed(b, db);
-    // a pure function of b: the fov comes from the pose at b, not from the camera's last state
-    const fov = this.rig.pose(b).fov;
-    const px = (sp.ang + sp.lin / Math.max(5, sp.dist) * 0.6) * (this.H / 2) / Math.tan(THREE.MathUtils.degToRad(fov) / 2);
+    const f = 1 / FPS / BAR;
+    let px = 0;
+    for (const o of [-2, -1, 0, 1, 2]) {
+      const sp = this.rig.speed(b + o * f, db);
+      px = Math.max(px, (sp.ang + sp.lin / Math.max(5, sp.dist) * 0.6) * (this.H / 2) / Math.tan(THREE.MathUtils.degToRad(sp.fov) / 2));
+    }
     return Math.max(1, Math.min(8, Math.ceil(px / 5)));
   }
 
@@ -166,9 +179,8 @@ export class Film {
     const b = barOfFrame(frame);
     const n = this.blurSamples(b);
     const shutter = 0.5 / FPS / BAR;
-    // previous-frame view-projection for dust streaks
-    const cprev = this.rig.apply(b - 1 / FPS / BAR);
-    this.prevVP.multiplyMatrices(cprev.projectionMatrix, cprev.matrixWorldInverse);
+    // previous-frame view-projection for dust streaks (scratch camera; the main one is untouched)
+    this.rig.viewProj(b - 1 / FPS / BAR, this.prevVP);
     const aa = this.needAA ? this.needAA(b) : false;
     const hdr = this.post.renderHDR(this.scene, this.rig.cam, n, (u) => this.setTime(b + (u - 0.5) * shutter), aa);
     if (n > 1) this.setTime(b);

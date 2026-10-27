@@ -111,11 +111,13 @@ export class Space {
         uniform float uWorld; uniform vec3 uSun; varying vec3 vDir;
         void main() {
           float h = vDir.y;
-          vec3 zen = vec3(0.20, 0.36, 0.66), hor = vec3(0.70, 0.78, 0.88), low = vec3(0.50, 0.58, 0.68);
-          vec3 c = h > 0.0 ? mix(hor, zen, pow(h, 0.55)) : mix(hor, low, pow(-h, 0.6));
+          // linear HDR, chosen through the ACES curve: the display shows a clear
+          // mid-blue 10-15 degrees up and a pale blue haze at the horizon
+          vec3 zen = vec3(0.09, 0.16, 0.38), hor = vec3(0.27, 0.385, 0.70), low = vec3(0.22, 0.31, 0.56);
+          vec3 c = h > 0.0 ? mix(hor, zen, pow(h, 0.5)) : mix(hor, low, pow(-h, 0.6));
           float s = max(0.0, dot(vDir, uSun));
-          c += vec3(1.0, 0.92, 0.8) * (pow(s, 900.0) * 12.0 + pow(s, 12.0) * 0.25);
-          gl_FragColor = vec4(c * 1.15, uWorld);
+          c += vec3(1.0, 0.92, 0.8) * (pow(s, 900.0) * 12.0 + pow(s, 12.0) * 0.2);
+          gl_FragColor = vec4(c, uWorld);
         }`,
     });
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), this.skyMat);

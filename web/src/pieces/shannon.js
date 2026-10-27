@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { Piece } from './piece.js';
 import { Lines } from '../gfx/lines.js';
-import { hitEnv, smoothstep, wrap } from '../time.js';
+import { smoothstep, wrap } from '../time.js';
 import { posAtS } from '../curve.js';
 
 export class Shannon extends Piece {
@@ -32,7 +32,7 @@ export class Shannon extends Piece {
     const on = smoothstep(1.86, 2.0, b) * (1 - smoothstep(2.9, 3.25, b));
     this.root.visible = on > 0.001;
     if (!this.root.visible) return;
-    const pulse = hitEnv(b, { min: 0.5, decay: 8, from: 1.9, to: 3.2 });
+    const pulse = 0.5 + 0.5 * Math.sin((b - 2.0) * Math.PI * 2);      // one slow breath per bar
     const grow = 1 + 0.6 * smoothstep(2.5, 3.2, b);
     this.rings.mesh.scale.setScalar(grow * (1 + 0.06 * pulse));
     this.rings.mesh.rotation.x = b * 0.4;

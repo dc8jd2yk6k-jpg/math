@@ -9,10 +9,11 @@ import { Piece } from './piece.js';
 import { L } from '../layout.js';
 import { S_OF } from '../curve.js';
 import { WINDOWS } from '../story.js';
-import { mulberry32, smoothstep, clamp, wrap, N_BARS, Pchip } from '../time.js';
+import { mulberry32, smoothstep, clamp, wrap, N_BARS } from '../time.js';
+import { CameraPath } from '../camera.js';
 
 export const P_C = 0.3116;
-const NX = 88, NZ = 88, NY = 44;
+export const NX = 88, NZ = 88, NY = 44;
 const RX = 41, RZ = 41;
 const WATER = 13;               // water level (voxels)
 
@@ -97,6 +98,29 @@ function buildIsland() {
   return { occ, cid, thr, top, I, kept, clusters, largest: lsz, cx, cz };
 }
 
+// The island in world space, built once and shared by the piece and the shot list.
+let _geom = null;
+export function islandGeom() {
+  if (_geom) return _geom;
+  const isl = buildIsland();
+  const C = L.percolation.center;
+  const groundH = isl.top[Math.round(isl.cz) * NX + Math.round(isl.cx)];
+  const origin = new THREE.Vector3(C.x - isl.cx - 0.5, C.y - groundH + 2, C.z - isl.cz - 0.5);
+  let n = 0, canopy = -1e9;
+  const sum = new THREE.Vector3(), min = new THREE.Vector3(1e9, 1e9, 1e9), max = new THREE.Vector3(-1e9, -1e9, -1e9), v = new THREE.Vector3();
+  for (let y = 0; y < NY; y++) for (let z = 0; z < NZ; z++) for (let x = 0; x < NX; x++) {
+    const i = isl.I(x, y, z);
+    if (isl.occ[i] !== 5) continue;
+    canopy = Math.max(canopy, origin.y + y + 1);
+    if (isl.cid[i] !== 0) continue;
+    v.set(x, y, z).add(origin);
+    sum.add(v); n++; min.min(v); max.max(v.addScalar(1));
+  }
+  const gold = { c: sum.multiplyScalar(1 / n).addScalar(0.5), min, max, n };
+  _geom = { isl, origin, center: C.clone(), gold, canopy };
+  return _geom;
+}
+
 const COL = {
   1: [0.36, 0.42, 0.52], 2: [0.47, 0.34, 0.22], 3: [0.33, 0.6, 0.2], 4: [0.86, 0.8, 0.58],
 };
@@ -141,7 +165,7 @@ function meshIsland(isl) {
         ao.push(lvl);
         const g = AO[lvl] * jitter;
         col.push(c[0] * g, c[1] * g, c[2] * g);
-        th.push(t === 5 ? thr[i] : -1);
+        th.push(t === 5 ? thr[i] + (cid[i] === 0 ? 2 : 0) : -1);
       }
       if (ao[0] + ao[2] < ao[1] + ao[3]) idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
       else idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -157,38 +181,31 @@ function meshIsland(isl) {
   return g;
 }
 
-// Catmull-Rom through keyed points [bar, Vector3] (b may run past N_BARS for
-// the wrap). Bars map to the curve parameter through a monotone cubic, so the
-// camera's speed is continuous through every key, including the loop seam.
-function keyedSpline(keys) {
-  const pts = keys.map((k) => k[1]);
-  const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);   // uniform: C1 in u
-  const map = new Pchip(keys.map((k) => k[0]), keys.map((_, i) => i / (keys.length - 1)));
-  return (b) => {
-    const u = clamp(map.at(b));
-    return { p: curve.getPoint(u), u };
-  };
-}
-
 export class Percolation extends Piece {
   constructor() {
     super('percolation', { appearS: S_OF.percolation - 120, window: WINDOWS.percolation });
-    const isl = this.isl = buildIsland();
+    const G = islandGeom();
+    const isl = this.isl = G.isl;
     // world placement: the line passes through the island's centre column
-    const C = L.percolation.center;
-    const groundH = isl.top[Math.round(isl.cz) * NX + Math.round(isl.cx)];
-    this.origin = new THREE.Vector3(C.x - isl.cx - 0.5, C.y - groundH + 2, C.z - isl.cz - 0.5);
+    const C = G.center;
+    this.origin = G.origin.clone();
     this.center = C.clone();
+    this.gold = G.gold.c.clone();
+    this.goldTag = new THREE.Vector3(G.gold.c.x, G.gold.max.y + 2.5, G.gold.c.z);
     const geo = meshIsland(isl);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     // sites open as p rises: a voxel shows only once its own uniform draw is below p
     this.uP = { value: P_C };
+    this.uFocus = { value: 0 };
     this.mat.onBeforeCompile = (sh) => {
       sh.uniforms.uP = this.uP;
+      sh.uniforms.uFocus = this.uFocus;
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float thr;\nvarying float vThr;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvThr = thr;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uP;\nvarying float vThr;')
-        .replace('void main() {', 'void main() {\n  if (vThr > uP) discard;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uP;\nuniform float uFocus;\nvarying float vThr;')
+        .replace('void main() {', 'void main() {\n  bool gold = vThr > 1.5;\n  if ((gold ? vThr - 2.0 : vThr) > uP) discard;')
+        // focus on the largest cluster: the other trees and the ground sink back, the gold one glows
+        .replace('#include <fog_fragment>', '  if (gold) gl_FragColor.rgb *= 1.0 + 0.35 * uFocus;\n  else gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(dot(gl_FragColor.rgb, vec3(0.3, 0.5, 0.2))) * 0.55, 0.6 * uFocus);\n#include <fog_fragment>');
     };
     this.mat.customProgramCacheKey = () => 'percolation-p';
     this.mesh = new THREE.Mesh(geo, this.mat);
@@ -228,65 +245,100 @@ export class Percolation extends Piece {
       }
       return h === -1e9 ? null : this.origin.y + h;
     };
-    this.buildPaths();
     console.log(`percolation island: ${isl.kept} forest voxels in ${isl.clusters} clusters (largest ${isl.largest}), ${geo.index.count / 6} faces`);
   }
 
-  // flight paths low over the island; heights follow the terrain and the forest
-  buildPaths() {
-    const C = this.center;
-    const low = (dx, dz, clear, b) => {
-      const h = this.heightAt(C.x + dx, C.z + dz);
-      return [b, new THREE.Vector3(C.x + dx, (h ?? C.y) + clear, C.z + dz)];
+  // The loop flight (40.5 -> 0.78 across the seam), built once the orbit camera
+  // exists (film.js). One CameraPath sampled densely from analytic curves, so
+  // its speed is designed, not left to the spline:
+  //   dive   40.5-41.72  from the whole-curve view into the island, at a
+  //                      constant zoom rate (eased in from the pull-back drift)
+  //   glide  41.72-42.62 a steady drone glide over the canopy toward the line
+  //   yank   42.62-42.78 a violent pull-back that settles on the island in space
+  // Both ends are sampled from the orbit camera, value and velocity.
+  buildCamera(rig) {
+    const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+    const C = this.center, PI = V3(C.x, C.y + 6, C.z);
+    const geom = islandGeom();
+    const ALT = geom.canopy + 9;                       // glide altitude: 9 above the tallest tree
+    const H = V3(-0.515, 0, -0.857).normalize();       // glide heading (toward the line)
+    const SPEED = 26;                                  // units per bar
+    const B0 = 41.72, B1 = 42.62, B2 = 42.78;
+    const along = (d) => V3(C.x - H.x * d, ALT, C.z - H.z * d);   // d units short of the line
+    const S0 = along(16 + SPEED * (B1 - B0)), E = along(16);
+    const look = (p) => p.clone().addScaledVector(H, 30).add(V3(0, -9, 0));
+    const keys = [{ b: 40.5, orbit: true }];
+
+    // dive: a Bezier from the orbit pose to the glide start, arriving along H
+    const o = rig.orbitPose(40.5);
+    const P0 = o.pos.clone(), T0 = P0.clone().add(V3(0, 0, -1).applyQuaternion(o.quat).multiplyScalar(400));
+    const c1 = P0.clone().lerp(PI, 0.35), c2 = S0.clone().addScaledVector(H, -120).add(V3(0, 60, 0));
+    const bez = (t) => {
+      const u = 1 - t;
+      return P0.clone().multiplyScalar(u * u * u).addScaledVector(c1, 3 * u * u * t).addScaledVector(c2, 3 * u * t * t).addScaledVector(S0, t * t * t);
     };
-    const rel = (dx, dy, dz, b) => [b, new THREE.Vector3(C.x + dx, C.y + dy, C.z + dz)];
-    // the loop: dive in at the end, keep flying after the seam, whip out at 0.75
-    this.loopPath = keyedSpline([
-      rel(30, 34, 52, 41.55), low(20, 26, 8, 41.8), low(10, 10, 6.5, 42.0), low(1, -1, 6, 42.25),
-      low(-6, -10, 6.5, 42.5), rel(-10, 40, -16, 42.78), rel(-12, 90, -20, 43.0),
-    ]);
-    // the climax drop: swoop up over the rim at bar 26, low across, rise out at 29
-    this.dropPath = keyedSpline([
-      rel(66, 52, 46, 25.55), rel(48, 34, 34, 25.8), rel(32, 22, 26, 25.95), low(24, 22, 8, 26.15), low(12, 4, 6.5, 26.7), low(0, -12, 6.5, 27.3),
-      low(-14, -16, 6.5, 27.9), low(-20, 2, 7.5, 28.5), rel(-18, 38, 20, 28.95), rel(-6, 72, 22, 29.15),
-    ]);
-    // look along the horizontal direction of travel, tilted down by `down` radians
-    const pose = (path, b, db = 0.02, down = 0.78) => {
-      const { p } = path(b);
-      const q = path(b + db).p;
-      const fwd = q.clone().sub(p);
-      fwd.y = 0;
-      if (fwd.lengthSq() < 1e-8) fwd.set(0, 0, -1);
-      fwd.normalize().multiplyScalar(Math.cos(down));
-      const look = p.clone().add(fwd).add(new THREE.Vector3(0, -Math.sin(down), 0));
-      const m = new THREE.Matrix4().lookAt(p, look, new THREE.Vector3(0, 1, 0));
-      return { pos: p, quat: new THREE.Quaternion().setFromRotationMatrix(m), fov: 52 };
+    const NT = 2000, cum = [0];
+    let prev = bez(0);
+    for (let i = 1; i <= NT; i++) { const q = bez(i / NT); cum.push(cum[i - 1] + q.distanceTo(prev)); prev = q; }
+    const Ltot = cum[NT];
+    const atLen = (l) => {                               // point at arc length l from the start
+      let lo = 0, hi = NT;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] < l) lo = m; else hi = m; }
+      const f = (l - cum[lo]) / Math.max(1e-9, cum[hi] - cum[lo]);
+      return bez((lo + f) / NT);
     };
-    const unwrap = (b) => (b < N_BARS / 2 ? b + N_BARS : b);   // 0..21 -> 42..63
-    this.cameraPath = {
-      weight: (b) => {
-        b = wrap(b);
-        const u = unwrap(b);
-        const loopW = smoothstep(41.48, 41.72, u) * (1 - smoothstep(42.6, 42.8, u));
-        const dropW = smoothstep(25.5, 25.66, b) * (1 - smoothstep(28.9, 29.12, b));
-        return Math.max(loopW, dropW);
-      },
-      pose: (b) => {
-        b = wrap(b);
-        const u = unwrap(b);
-        if (u > 41.3 && u < 43.2) return pose(this.loopPath, u);
-        return pose(this.dropPath, b, 0.02, 0.8);
-      },
-    };
+    // remaining length decays exponentially once the zoom rate has eased in:
+    // rem(t) = (L + c) exp(-K(t)) - c, K' = k(t) = kmax * smoothstep(0, RAMP, t), c = SPEED / kmax
+    const T = B0 - 40.5, RAMP = 0.35;
+    const Kof = (t, kmax) => kmax * (t < RAMP ? (t ** 3 / RAMP ** 2 - t ** 4 / (2 * RAMP ** 3)) : t - RAMP / 2);
+    let lo = 0.5, hi = 40;
+    for (let it = 0; it < 80; it++) {
+      const k = (lo + hi) / 2, c = SPEED / k;
+      if ((Ltot + c) * Math.exp(-Kof(T, k)) - c > 0) lo = k; else hi = k;
+    }
+    const kmax = (lo + hi) / 2, cc = SPEED / kmax;
+    const smooth = (a, z, x) => smoothstep(a, z, x);
+    for (let b = 40.54; b < B0 - 1e-6; b += 0.02) {
+      const t = b - 40.5;
+      const rem = Math.max(0, (Ltot + cc) * Math.exp(-Kof(t, kmax)) - cc);
+      const pos = atLen(Ltot - rem);
+      const target = T0.clone().lerp(PI, smooth(0, 0.45, t)).lerp(look(pos), smooth(0.8, 1.2, t));
+      keys.push({ b, pos, target, fov: 36 + 10 * smooth(0.3, 0.85, t) + 9 * smooth(0.85, 1.22, t) });
+    }
+    // glide: constant speed, constant altitude
+    for (let b = B0; b < B1 + 1e-6; b += 0.1) {
+      const pos = along(16 + SPEED * (B1 - b));
+      keys.push({ b, pos, target: look(pos), fov: 55 });
+    }
+    // the yank: the glide's own motion fades as the pull-back fires. Jerk-limited
+    // start, peak speed 40% in, long settle: g' = 60 u^2 (1-u)^3
+    const R = rig.orbitPose(B2 - N_BARS);
+    const RT = R.focus.clone();
+    const g = (u) => u ** 3 * (20 - 45 * u + 36 * u * u - 10 * u ** 3);
+    for (let k = 1; k < 16; k++) {
+      const u = k / 16, tau = u * (B2 - B1);
+      const pos = E.clone().addScaledVector(H, SPEED * tau * (1 - u) ** 2).lerp(R.pos, g(u));
+      const target = look(pos).lerp(RT, 1 - (1 - u) ** 3);
+      keys.push({ b: B1 + tau, pos, target, fov: 55 + (R.fov - 55) * g(u) });
+    }
+    keys.push({ b: B2, orbit: true });
+    this.loopInfo = { kmax, Ltot, S0, E, ALT };
+    return [new CameraPath(rig, keys)];
   }
 
   // daylight: inside the world the sky and fog take over
   worldWeight(b) {
     b = wrap(b);
     const u = b < N_BARS / 2 ? b + N_BARS : b;
-    const loop = smoothstep(41.6, 41.78, u) * (1 - smoothstep(42.56, 42.7, u));
-    const drop = smoothstep(25.92, 26.05, b) * (1 - smoothstep(28.85, 29.02, b));
+    const loop = smoothstep(41.45, 41.66, u) * (1 - smoothstep(42.64, 42.74, u));
+    const drop = smoothstep(25.7, 25.92, b) * (1 - smoothstep(28.95, 29.15, b));
     return Math.max(loop, drop);
+  }
+
+  // the largest cluster steps forward while the camera orbits it
+  focusAt(b) {
+    b = wrap(b);
+    return smoothstep(25.95, 26.1, b) * (1 - smoothstep(27.55, 27.85, b));
   }
 
   pAt(b) {
@@ -298,6 +350,7 @@ export class Percolation extends Piece {
   update(b, ctx) {
     b = wrap(b);
     this.uP.value = this.pAt(b);
+    this.uFocus.value = this.focusAt(b);
     const near = ctx.camera.position.distanceTo(this.center) < 900;
     this.root.visible = this.presence(ctx, 40) > 0 && (near || (b > 38.3 && b < 41.9));
   }
@@ -305,6 +358,7 @@ export class Percolation extends Piece {
   labels(b) {
     b = wrap(b);
     const a = smoothstep(26.6, 26.8, b) * (1 - smoothstep(28.5, 28.7, b));
+    const ga = smoothstep(26.15, 26.35, b) * (1 - smoothstep(27.45, 27.65, b));
     const C = this.center;
     const pa = smoothstep(22.4, 22.6, b) * (1 - smoothstep(25.5, 25.7, b));
     const p = this.pAt(b);
@@ -313,6 +367,9 @@ export class Percolation extends Piece {
       { screen: [0.5, 0.84], text: 'each site of ℤ³ open with probability p', style: 'label', size: 20, align: 'center', dy: 40, alpha: pa * 0.85, color: 'rgba(205,207,218,1)' },
       { screen: [0.5, 0.86], text: `trees: clusters of site percolation on ℤ³ at p_{c} ≈ ${P_C}`, style: 'label', size: 22, align: 'center', alpha: a * 0.95 },
       { screen: [0.5, 0.886], text: 'every one of them ends', style: 'serif', size: 30, align: 'center', alpha: a, dy: 22 },
+      // pinned on the subject of the orbit
+      { p: this.goldTag, text: 'largest cluster', style: 'label', size: 24, align: 'center', dy: -34, alpha: ga },
+      { p: this.goldTag, text: 'finite', style: 'serif', size: 40, align: 'center', dy: 0, alpha: ga, color: 'rgba(255,214,120,1)' },
     ];
   }
 }

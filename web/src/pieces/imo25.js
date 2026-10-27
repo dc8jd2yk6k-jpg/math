@@ -45,14 +45,19 @@ export function construct() {
   return { r, R, M, N, C, D, A, B, P, E, F, H, O, rO, v, T, err };
 }
 
+// figure frame in the world: the line CMND is vertical and A sits exactly on
+// the parked head
+export const IMO25_SCALE = 5.6;
+export function imo25World(p, z = 0) {
+  const G = construct(), A3 = L.imo25.A;
+  return new THREE.Vector3(A3.x + (p.x - G.A.x) * IMO25_SCALE, A3.y + (p.y - G.A.y) * IMO25_SCALE, z);
+}
+
 export class Geometry extends Piece {
   constructor() {
     super('imo25', { appearS: S_OF.imo25 - 30, window: WINDOWS.imo25 });
     const G = this.G = construct();
-    const S = this.scale = 5.6;
-    const A3 = L.imo25.A;
-    // figure frame: the line CMND is vertical; A sits exactly on the head
-    this.to3 = (p, z = 0) => new THREE.Vector3(A3.x + (p.x - G.A.x) * S, A3.y + (p.y - G.A.y) * S, z);
+    this.to3 = (p, z = 0) => imo25World(p, z);
     const P = (p) => this.to3(p);
     this.center = P(v2(0.4, 1.0));
     const segs = [];

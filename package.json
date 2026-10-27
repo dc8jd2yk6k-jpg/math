@@ -9,7 +9,6 @@
     "render": "node render/render.mjs"
   },
   "dependencies": {
-    "three": "0.170.0",
-    "ws": "^8.18.0"
+    "three": "0.170.0"
   }
 }

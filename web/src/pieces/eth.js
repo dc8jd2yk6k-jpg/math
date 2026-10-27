@@ -1,136 +1,134 @@
-// 1950 · Shannon: thin orbit rings around the head at the origin.
-// 2026 · ETH: the exponential search tree (2^n) grows one last time; two red
-// dots, one per lab, climb separate paths and reach the top on the same beat;
-// then the tree folds into the line.
+// The climax: the Exponential Time Hypothesis. A 2^n search tree for 3-SAT
+// explodes upward level by level on the eighth notes. Two heads, one per lab,
+// find short paths through it and reach the top a beat apart (the papers
+// came out hours apart), then the whole tree folds back into the line.
 import * as THREE from 'three';
-import { Piece, WHITE, DIM } from './common.js';
-import { makeSegments, makePoints } from '../gfx/glow.js';
-import { frameAt, spineAt } from '../curve.js';
-import { rng, clamp, ease, smoothstep, hexToRgb } from '../util.js';
-import { PALETTE } from '../config.js';
+import { Piece } from './piece.js';
+import { Lines } from '../gfx/lines.js';
+import { Head } from '../world/head.js';
+import { L } from '../layout.js';
+import { S_OF, S_END } from '../curve.js';
+import { WINDOWS } from '../story.js';
+import { clamp, ease, smoothstep, wrap, mulberry32 } from '../time.js';
 
-const RED = hexToRgb(PALETTE.head);
-
-export class Shannon extends Piece {
-  constructor() {
-    super(0.85, 1.95, 0.15, 0.35);
-    const f = frameAt(1.0);
-    const o = spineAt(1.0);
-    this.center = o.clone();
-    const segs = [];
-    const tilt = new THREE.Quaternion().setFromAxisAngle(f.R, -0.5);
-    for (let k = 0; k < 7; k++) {
-      const rad = 1.1 + k * 0.26, n = 160;
-      for (let i = 0; i < n; i++) {
-        const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2;
-        const P = (a) => o.clone().add(f.R.clone().multiplyScalar(Math.cos(a) * rad).addScaledVector(f.F, Math.sin(a) * rad).applyQuaternion(tilt));
-        segs.push({ a: P(a0), b: P(a1), color: RED.map((c) => c * (0.55 - k * 0.05)), width: 0.03, born: 0.9 + k * 0.04 + (i / n) * 0.3, grow: 0.01 });
-      }
-    }
-    this.rings = makeSegments(segs, { minPx: 1.4, core: 0.8 });
-    this.root.add(this.rings);
-  }
-  update(b, ctx) {
-    if (!super.update(b, ctx)) return;
-    this.rings.material.uniforms.uGain.value = this.g;
-  }
-}
+const D = 7;
+const T0 = 34.0;                 // first level
+const LEVEL = 1 / 8;             // one level per eighth note
+const LAB = { oai: { end: 36.0, color: new THREE.Color(0.75, 0.85, 1.0) }, ant: { end: 36.25, color: new THREE.Color(1.0, 0.55, 0.3) } };
 
 export class ETH extends Piece {
-  constructor() {
-    super(24.9, 29.7, 0.12, 0.3);
-    const f = frameAt(25.5);
-    const root = spineAt(24.95);
-    const top = spineAt(26.0);
-    const height = top.distanceTo(root);
-    this.f = f; this.root0 = root.clone();
-    this.center = root.clone().lerp(top, 0.55);
-    const r = rng(1999);
-    const depth = 8, dz = height / depth;
+  constructor(film) {
+    super('eth', { appearS: S_OF.yangmills + 4, window: WINDOWS.eth });
+    const root = L.eth.root, top = L.eth.top;
+    this.root3 = root; this.top3 = top;
+    this.center = root.clone().lerp(top, 0.5);
+    const H = top.y - root.y;
+    const rnd = mulberry32(316);
+    // nodes: level k has 2^k nodes; children alternate splitting in x and z
+    const nodes = [[{ p: root.clone(), k: 0 }]];
+    for (let k = 1; k <= D; k++) {
+      // a canopy: levels get closer together and keep spreading, like a real tree
+      const spread = 42 * Math.pow(0.8, k - 1);
+      const y = root.y + H * 0.92 * (1 - Math.pow(0.78, k)) / (1 - Math.pow(0.78, D));
+      const lvl = [];
+      for (const n of nodes[k - 1]) for (const s of [-1, 1]) {
+        const off = k % 2 ? new THREE.Vector3(s * spread, 0, (rnd() - 0.5) * spread * 0.5) : new THREE.Vector3((rnd() - 0.5) * spread * 0.5, 0, s * spread);
+        const p = n.p.clone().add(off); p.y = y + (rnd() - 0.5) * H * 0.02;
+        lvl.push({ p, k, parent: n });
+      }
+      nodes.push(lvl);
+    }
+    this.nodes = nodes;
     const segs = [];
-    const nodes = [];
-    const grow = (p, level, x, spread) => {
-      nodes.push({ p, level });
-      if (level >= depth) return;
-      for (const s of [-1, 1]) {
-        const nx = x + s * spread * (0.8 + r() * 0.4);
-        const q = root.clone().addScaledVector(f.U, (level + 1) * dz).addScaledVector(f.R, nx).addScaledVector(f.F, (r() - 0.5) * 1.2);
-        segs.push({ a: p, b: q, color: WHITE, width: 0.03, alpha: 0.5, born: 25.0 + level * 0.0625, grow: 0.06, lvl: level, side: s, x: nx });
-        grow(q, level + 1, nx, spread * 0.56);
-      }
+    for (let k = 1; k <= D; k++) for (const n of nodes[k]) {
+      segs.push({ a: n.parent.p, b: n.p, k0: k - 1, k1: k, color: [1, 1, 1], alpha: 0.5 * Math.pow(0.86, k) + 0.12, width: 1.0 + 0.5 * Math.pow(0.8, k) });
+    }
+    this.segs = segs;
+    this.tree = new Lines(segs.map((s) => ({ ...s })), { blending: THREE.AdditiveBlending });
+    this.root.add(this.tree.mesh);
+    const leaves = nodes.flat().map((n) => n.p);
+    this.leafPts = new THREE.Points(new THREE.BufferGeometry().setFromPoints(leaves),
+      new THREE.PointsMaterial({ size: 3, sizeAttenuation: false, color: new THREE.Color(1.4, 1.4, 1.5), transparent: true, depthWrite: false }));
+    this.root.add(this.leafPts);
+    // two short paths, one per lab: a few branch choices, then straight to the top
+    const pathOf = (bits) => {
+      let n = nodes[0][0]; const pts = [n.p];
+      for (let k = 1; k <= 4; k++) { const kids = nodes[k].filter((c) => c.parent === n); n = kids[bits[k - 1]]; pts.push(n.p); }
+      pts.push(n.p.clone().lerp(top, 0.55).setX(top.x + (n.p.x - top.x) * 0.25).setZ(top.z + (n.p.z - top.z) * 0.25));
+      pts.push(top.clone());
+      return new THREE.CatmullRomCurve3(pts, false, 'centripetal');
     };
-    grow(root, 0, 0, 3.3);
-    // two lit paths (left-ish and right-ish), the labs' searches
-    const pathOf = (choose) => {
-      const pts = [root.clone()];
-      let x = 0, spread = 3.3;
-      const rr = rng(choose);
-      for (let l = 0; l < depth; l++) {
-        const s = (l === 0 ? (choose === 1 ? -1 : 1) : (rr() < 0.5 ? -1 : 1));
-        x += s * spread * 0.95; spread *= 0.56;
-        pts.push(root.clone().addScaledVector(f.U, (l + 1) * dz).addScaledVector(f.R, x));
-      }
-      return pts;
-    };
-    this.paths = [pathOf(1), pathOf(7)];
-    const lit = [];
-    this.paths.forEach((P) => { for (let i = 0; i < P.length - 1; i++) lit.push({ a: P[i], b: P[i + 1], color: [1.5, 1.5, 1.55], width: 0.06, born: 25.3 + i * 0.085, grow: 0.085 }); });
-    this.tree = makeSegments(segs, { minPx: 1.1, core: 0.5 });
-    this.lit = makeSegments(lit, { minPx: 1.8, core: 1.0 });
-    this.root.add(this.tree, this.lit);
-    this.t0 = this.tree.geometry.attributes.p0.array.slice();
-    this.t1 = this.tree.geometry.attributes.p1.array.slice();
-    this.l0 = this.lit.geometry.attributes.p0.array.slice();
-    this.l1 = this.lit.geometry.attributes.p1.array.slice();
-    this.dots = makePoints([{ p: root, color: RED.map((c) => c * 2.2), size: 0.5 }, { p: root, color: RED.map((c) => c * 2.2), size: 0.5 }], { minPx: 6, maxPx: 22 });
-    this.root.add(this.dots);
-    this.dotPos = [root.clone(), root.clone()];
-    this.labels = [
-      { p: top.clone().addScaledVector(f.U, 1.2).addScaledVector(f.R, -5.2), text: '2ⁿ', b0: 25.45, b1: 26.3, dx: 0, dy: 0, italic: true, size: 40, center: true },
-    ];
-    this.labPos = [new THREE.Vector3(), new THREE.Vector3()];
-    this.labels.push({ p: this.labPos[0], text: 'OpenAI', b0: 25.35, b1: 27.3, dx: -26, dy: 0, size: 26, sans: true, right: true });
-    this.labels.push({ p: this.labPos[1], text: 'Anthropic', b0: 25.35, b1: 27.3, dx: 26, dy: 0, size: 26, sans: true });
-    this.labels.push({ p: top.clone().addScaledVector(f.U, 3.5), text: '3-SAT  ∈  TIME(2^{o(n)})', b0: 27.1, b1: 29.6, dx: 0, dy: 0, italic: true, size: 36, center: true });
+    this.paths = { oai: pathOf([0, 1, 1, 0]), ant: pathOf([1, 0, 0, 1]) };
+    this.glow = {};
+    this.heads = {};
+    for (const id of ['oai', 'ant']) {
+      const c = this.paths[id], n = 160, s = [];
+      for (let i = 0; i < n; i++) s.push({ a: c.getPointAt(i / n), b: c.getPointAt((i + 1) / n), k0: i / n, k1: (i + 1) / n, color: LAB[id].color.toArray(), alpha: 0.95, width: 2.6 });
+      this.glow[id] = new Lines(s, { blending: THREE.AdditiveBlending });
+      this.root.add(this.glow[id].mesh);
+      const h = new Head();
+      h.material.uniforms.uColor.value.copy(LAB[id].color);
+      this.heads[id] = h;
+      this.root.add(h.mesh);
+    }
+    // the main head steps aside while the two lab heads race
+    if (film) film.headGain = (b) => { b = wrap(b); return 1 - smoothstep(34.4, 34.55, b) * (1 - smoothstep(36.2, 36.3, b)); };
+    this.lastFold = -1;
   }
 
-  along(P, t) {   // position along a polyline, t in [0,1]
-    const n = P.length - 1, x = clamp(t) * n, i = Math.min(n - 1, Math.floor(x));
-    return P[i].clone().lerp(P[i + 1], x - i);
+  progress(b, id) {
+    return ease.inQuad(clamp((b - 34.45) / (LAB[id].end - 34.45)));
   }
+
+  fold(b) { return b >= 36.45 && b < 38 ? ease.inOutCubic(clamp((b - 36.45) / 0.7)) : b >= 38 || b < 30 ? 1 : 0; }
 
   update(b, ctx) {
-    if (!super.update(b, ctx)) return;
-    // the tree folds into the line (the exponential collapses)
-    const c = ease.inOutCubic(clamp((b - 26.3) / 0.9));
-    const fold = (src, attr) => {
-      const v = new THREE.Vector3();
-      for (let i = 0; i < attr.count; i++) {
-        v.fromArray(src, i * 3);
-        const d = v.clone().sub(this.root0);
-        const axis = this.root0.clone().addScaledVector(this.f.U, d.dot(this.f.U));
-        v.lerp(axis, c);
-        attr.setXYZ(i, v.x, v.y, v.z);
-      }
-      attr.needsUpdate = true;
-    };
-    const ta = this.tree.geometry.attributes, la = this.lit.geometry.attributes;
-    fold(this.t0, ta.p0); fold(this.t1, ta.p1); fold(this.l0, la.p0); fold(this.l1, la.p1);
-    const fade = 1 - smoothstep(26.9, 27.4, b);
-    this.tree.material.uniforms.uGain.value = this.g * fade;
-    this.lit.material.uniforms.uGain.value = this.g * fade;
-    // two dots climb their paths and arrive together on the bar-26 downbeat
-    const t = ease.inOutSine(clamp((b - 25.3) / 0.7));
-    const pos = this.dots.geometry.attributes.position;
-    this.paths.forEach((P, i) => {
-      const p = this.along(P, t);
-      const axis = this.root0.clone().addScaledVector(this.f.U, p.clone().sub(this.root0).dot(this.f.U));
-      p.lerp(axis, c);
-      pos.setXYZ(i, p.x, p.y, p.z);
-      this.labPos[i].copy(p);
-    });
-    pos.needsUpdate = true;
-    const arrive = b >= 26 ? Math.exp(-(b - 26) * 5) : 0;
-    this.dots.material.uniforms.uGain.value = this.g * smoothstep(25.25, 25.35, b) * (1 + arrive * 1.5) * (1 - smoothstep(26.6, 27.2, b));
+    b = wrap(b);
+    this.root.visible = this.shown(ctx, this.center, 1200) && (b >= 33.9 || b < 1.3);
+    if (!this.root.visible) return;
+    const f = this.fold(b);
+    if (f !== this.lastFold) {
+      this.lastFold = f;
+      const ga = this.tree.geometry.attributes.pa, gb = this.tree.geometry.attributes.pb;
+      const squash = (p, o) => o.set(p.x + (this.top3.x - p.x) * f, p.y, p.z + (this.top3.z - p.z) * f);
+      const A = new THREE.Vector3(), B = new THREE.Vector3();
+      this.segs.forEach((s, j) => {
+        squash(s.a, A); squash(s.b, B);
+        for (let k = 0; k < 4; k++) { ga.setXYZ(j * 4 + k, A.x, A.y, A.z); gb.setXYZ(j * 4 + k, B.x, B.y, B.z); }
+      });
+      ga.needsUpdate = gb.needsUpdate = true;
+    }
+    const live = b >= 33.9 && b < 38;
+    const reveal = live ? (b - T0) / LEVEL : 1e9;
+    const treeA = live ? 1 - 0.85 * f : 0;
+    this.tree.set({ res: ctx.res, reveal, opacity: treeA, gain: 1.25 });
+    this.leafPts.material.opacity = live ? smoothstep(T0 + D * LEVEL, T0 + D * LEVEL + 0.1, b) * (1 - f) : 0;
+    this.leafPts.material.size = 3 * ctx.res.x / 1080;
+    for (const id of ['oai', 'ant']) {
+      const p = this.progress(b, id);
+      const on = live && b >= 34.4 ? 1 - smoothstep(36.35, 36.6, b) : 0;
+      this.glow[id].set({ res: ctx.res, reveal: p, opacity: on, gain: 1.6 });
+      const h = this.heads[id];
+      h.mesh.visible = on > 0 && p < 1 && b < LAB[id].end;
+      h.update({ pos: this.paths[id].getPointAt(p), res: ctx.res, px: 40, gain: 1.2 });
+    }
+  }
+
+  labels(b) {
+    b = wrap(b);
+    const out = [];
+    const treeA = smoothstep(34.6, 34.8, b) * (1 - smoothstep(36.3, 36.5, b));
+    out.push({ p: this.root3.clone().add(new THREE.Vector3(0, -6, 0)), text: '3-SAT, n variables', style: 'label', size: 20, align: 'center', alpha: smoothstep(34.05, 34.2, b) * (1 - smoothstep(35.2, 35.4, b)) * 0.85, color: 'rgba(205,207,218,1)' });
+    out.push({ screen: [0.1, 0.33], text: '2ⁿ', style: 'serif', size: 72, alpha: treeA });
+    out.push({ screen: [0.1, 0.33], text: 'branches', style: 'label', size: 18, dy: 30, alpha: treeA * 0.8, color: 'rgba(205,207,218,1)' });
+    for (const [id, name, date] of [['oai', 'OpenAI', 'Oct 26'], ['ant', 'Anthropic', 'Oct 27']]) {
+      const p = this.paths[id].getPointAt(this.progress(b, id));
+      const a = smoothstep(34.55, 34.75, b) * (1 - smoothstep(36.3, 36.5, b));
+      out.push({ p, text: name, style: 'label', size: 22, dx: id === 'oai' ? -18 : 18, dy: -14, align: id === 'oai' ? 'right' : 'left', alpha: a });
+      out.push({ p, text: date, style: 'mono', size: 18, dx: id === 'oai' ? -18 : 18, dy: 10, align: id === 'oai' ? 'right' : 'left', alpha: a * 0.8 });
+    }
+    out.push({ p: this.top3, text: '2^{o(n)}', style: 'serif', size: 52, dx: 26, dy: 14, alpha: smoothstep(36.3, 36.5, b) * (1 - smoothstep(37.35, 37.5, b)), color: 'rgba(255,120,104,1)' });
+    out.push({ p: this.top3, text: 'Lean-verified · under expert review', style: 'label', size: 18, dx: 28, dy: 46, alpha: smoothstep(36.5, 36.7, b) * (1 - smoothstep(37.35, 37.5, b)) * 0.85, color: 'rgba(205,207,218,1)' });
+    return out;
   }
 }

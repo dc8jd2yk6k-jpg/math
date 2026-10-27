@@ -1,39 +1,40 @@
 # Sources and fact-check
 
-Every on-screen claim was checked before it went into the film (research cut-off: 2026-10-27).
-Results from 2026 are shown with the verification status they had at that date. Most were
-announced by the labs themselves and were still under independent review.
+Every on-screen claim was checked on **2026-10-27**, the date the film is set. The 2026 results are
+shown with the review status they had on that day. Most were announced by the labs themselves and
+had not yet been independently verified.
 
-| # | On screen | Date used | Status shown | Sources |
-|---|-----------|-----------|--------------|---------|
-| 0 | Shannon, *Programming a Computer for Playing Chess*: ~10^120 games | 1950 | n/a | Shannon, Phil. Mag. 41 (1950) |
-| 1 | IBM Deep Blue defeats Kasparov, 3½–2½; ~200M positions/s; board = final position of Game 6 after 19.c4 (score replayed with python-chess) | 1997-05-11 | n/a | IBM; game score of Deep Blue–Kasparov 1997, Game 6 |
-| 2 | Google DeepMind AlphaGo defeats Lee Sedol 4–1. The board replays moves 1–37 of Game 2; Move 37 is the fifth-line shoulder hit AlphaGo rated at roughly 1 in 10,000 for a human | 2016-03-15 | n/a | [BGA match report & SGF](https://britgo.org/node/5458) |
-| 3 | AlphaProof + AlphaGeometry 2: IMO 2024 silver standard, 28/42 (P1 P2 P4 P6), one point below gold. Problems were hand-translated into Lean, and some took up to 3 days | 2024-07-25 | n/a | Google DeepMind blog, July 2024 |
-| 4 | Gemini Deep Think: IMO 2025 gold standard, 35/42, 5 of 6, end-to-end natural language within the 4.5 h limit, graded by IMO coordinators | 2025-07-21 | n/a | Google DeepMind blog, July 2025 |
-| 5 | OpenAI internal model disproves the Erdős unit distance conjecture (n^{1+ε} unit distances). Companion paper by external mathematicians (incl. N. Alon, T. Gowers) | 2026-05-20 | Verified by mathematicians | [DAIR summary](https://academy.dair.ai/papers/openai-disproves-the-unit-distance-conjecture), [arXiv 2605.20695](https://arxiv.org/abs/2605.20695), [Quanta](https://www.quantamagazine.org/why-the-legendary-erdos-problems-are-falling-to-ai-20260803/) |
-| 6 | Counterexample to the Jacobian conjecture found with Claude (L. Alpöge, Anthropic); dimension 3 and above | 2026-07-19 | Checkable by computer algebra | [ForkLog](https://forklog.com/en/anthropics-claude-fable-5-finds-counterexample-to-1939-jacobian-conjecture/), [Wikipedia](https://en.wikipedia.org/wiki/Jacobian_conjecture), [arXiv 2608.00222](https://arxiv.org/pdf/2608.00222) |
-| 7 | Claude-written, Lean-formalized proof that θ(p_c) = 0 for critical percolation in dimensions 3–10 (posted by an Anthropic researcher) | 2026-08-28 | Awaiting human review | [anthropics/formal-math](https://github.com/anthropics/formal-math/tree/795efb86f191735c5481675763537cfb4ff37e55/percolation), [Quanta](https://www.quantamagazine.org/updates/transformation/) |
-| 8 | OpenAI announces finite-time blow-up for 3D Navier–Stokes (analytic proof + Lean; ~10,000 agents, 88 h) | 2026-09-08 | Under expert review | [OpenAI on X](https://x.com/OpenAI/status/2097374646148481532), [Tufts Daily](https://www.tuftsdaily.com/article/2026/09/mathematicians-still-checking-the-navier-stokes-proof-that-openai-claims-to-have-solved), [Interesting Engineering](https://interestingengineering.com/ai-robotics/openai-navier-stokes-mystery-solved) |
-| 9 | OpenAI releases 722 mathematics manuscripts from an unreleased internal model (~4,000 problems posed) | 2026-10-06 | Still being vetted | [OpenAI community post](https://community.openai.com/t/first-look-at-mathematics-manuscripts-from-an-internal-frontier-model-at-openai/1403886), [Unite.AI](https://www.unite.ai/openai-releases-722-math-manuscripts-from-an-unreleased-ai-model/), [Quanta](https://www.quantamagazine.org/updates/transformation/) |
-| 10 | OpenAI claims existence of 4D Yang–Mills / QCD (Balaban program). The mass gap is **not** claimed | 2026-10-26 | Under review | [The Next Web](https://thenextweb.com/news/openai-exponential-time-hypothesis-false-kakeya-yang-mills), [Unite.AI](https://www.unite.ai/openai-says-its-models-produced-three-proofs-in-math-cs-and-physics/) |
-| 11 | The Exponential Time Hypothesis is false: OpenAI (announced Oct 26) and Anthropic (*A 2^{o(n)} Time Algorithm for 3-SAT*, Oct 27) independently. Both labs found it on Oct 16; both are Lean-verified | found 2026-10-16 | Independent review underway | [The Next Web](https://thenextweb.com/news/openai-exponential-time-hypothesis-false-kakeya-yang-mills), [OfficeChai](https://officechai.com/ai/anthropic-says-claude-too-independently-disproved-exponential-time-hypothesis-on-the-same-day-as-openai/), [anthropics/formal-math/eth](https://github.com/anthropics/formal-math/tree/16a5ce41304fcdaea4e0be7c132e1c361dc26da5/eth) |
+| On screen | Date | What the film says | Status shown | Sources |
+|---|---|---|---|---|
+| Claude Shannon | 1950-03 | *Programming a Computer for Playing Chess*: about 10^120 possible games | — | C. E. Shannon, *Philosophical Magazine* 41 (314), 1950 |
+| Deep Blue | 1997-05-11 | Beats Kasparov 3½–2½ with brute-force search at 200 million positions per second. The board shows the final position of Game 6 (after 19.c4, Kasparov resigned), replayed from the game score with python-chess | — | [IBM: Deep Blue](https://www.ibm.com/history/deep-blue) |
+| AlphaGo | 2016-03 | Beats Lee Sedol 4–1. The board replays Game 2, moves 1–37. Move 37 is the fifth-line shoulder hit that AlphaGo itself estimated a human would play about 1 time in 10,000 | — | [Google DeepMind: AlphaGo](https://deepmind.google/research/breakthroughs/alphago/) |
+| IMO · Silver | 2024-07 | AlphaProof + AlphaGeometry 2: P1 P2 P4 P6 solved, 28/42, one point below the gold threshold. The problems were hand-translated into Lean, and some took up to three days. The card types the Lean 4 statement of Problem 1 | — | [Google DeepMind, 25 Jul 2024](https://deepmind.google/discover/blog/ai-solves-imo-problems-at-silver-medal-level/) |
+| IMO · Gold | 2025-07 | Gemini Deep Think: 35/42 (P1–P5), end to end in natural language, within the 4.5-hour limit. The figure is Problem 2, constructed exactly; the tangency holds to ~1e-15 | — | [Google DeepMind, 21 Jul 2025](https://deepmind.google/discover/blog/advanced-version-of-gemini-with-deep-think-officially-achieves-gold-medal-standard-at-the-international-mathematical-olympiad/), [AoPS: 2025 IMO P2](https://artofproblemsolving.com/wiki/index.php/2025_IMO_Problems/Problem_2) |
+| Erdős unit distances | 2026-05-20 | An OpenAI model disproves Erdős's 1946 unit distance conjecture: infinitely many n with n^{1+δ} unit distances. The figure shows Erdős's own grid construction, which the new family beats | Checked by external mathematicians | [OpenAI](https://openai.com/index/model-disproves-discrete-geometry-conjecture/), [AIhub](https://aihub.org/2026/06/02/an-ai-solution-to-an-80-year-old-problem-has-shocked-mathematicians/) |
+| Jacobian conjecture | 2026-07-20 | Found with Claude (L. Alpöge): a polynomial map of ℂ³ with Jacobian determinant −2 that sends three points to one, so the conjecture fails in dimension 3 and up. **The film uses the real map**: F(0,0,−1/4) = F(1,−3/2,13/2) = F(−1,3/2,13/2) = (−1/4,0,0), det J ≡ −2 (checked in this repo) | Identities checked by many people; not yet peer-reviewed | [arXiv 2608.00222](https://arxiv.org/pdf/2608.00222), [Mezha](https://mezha.ua/en/news/shi-proti-87-rokiv-matematiki-claude-fable-5-dopomig-sprostuvati-matematichnu-gipotezu-z-1939-roku-313451/), [Win-Vector](https://win-vector.com/2026/07/23/maybe-jacobian-conjecture-counterexamples-are-not-rare/) |
+| Critical percolation | 2026-08-28 | A Claude-written, Lean-formalized proof that θ(p_c) = 0 (no infinite cluster at criticality) in dimensions 3 to 10, posted by an Anthropic researcher | Awaiting independent review | [Quanta](https://www.quantamagazine.org/update/167555/), [Pillitteri](https://pasqualepillitteri.it/en/news/19787/claude-solves-percolation-conjecture) |
+| Navier–Stokes | 2026-09-08 | OpenAI claims smooth 3D flow can blow up in finite time, for the forced equations, with a Lean formalization (about 10,000 agents, 88 hours) | Under expert review; disputed | [Unite.AI](https://unite.ai/openai-says-internal-ai-system-resolved-the-navier-stokes-problem), [Let's Data Science](https://letsdatascience.com/news/openai-publishes-proposed-navier-stokes-singularity-proof-83719c42) |
+| 722 manuscripts | 2026-10-06 | OpenAI releases 722 mathematics manuscripts from an unreleased model, from about 4,000 problems posed | Being vetted; three were withdrawn on Oct 7 | [Interesting Engineering](https://interestingengineering.com/ai-robotics/openai-largest-math-release-lean-proofs), [AI Weekly](https://aiweekly.co/alerts/openai-publishes-722-ai-generated-math-manuscripts-on-github) |
+| 4D Yang–Mills | 2026-10-26 | OpenAI claims existence of 4D Yang–Mills (and QCD). The mass gap is **not** claimed | Private review (group led by D. Gross) | [MindStudio](https://www.mindstudio.ai/blog/openai-ai-discoveries-math-physics-cs), [Tech Insider](https://tech-insider.org/openai-three-science-discoveries-eth-kakeya-qcd-2026/) |
+| Exponential Time Hypothesis | 2026-10-26 / 27 | OpenAI (Oct 26) and Anthropic (*A 2^{o(n)} Time Algorithm for 3-SAT*, Oct 27) refute ETH independently, hours apart. Both say the algorithm was found on Oct 16; both are Lean-checked | Under expert review | [OfficeChai](https://officechai.com/ai/anthropic-says-claude-too-independently-disproved-exponential-time-hypothesis-on-the-same-day-as-openai/), [anthropics/formal-math/eth](https://github.com/anthropics/formal-math/tree/16a5ce41304fcdaea4e0be7c132e1c361dc26da5/eth), [FourWeekMBA](https://fourweekmba.com/ai-openai-says-its-ai-refuted-the-exponential-time-hypothesis/) |
 
 ## Notes on choices
 
-* **Yang–Mills date.** The brief said 10.27. OpenAI's post went out on Monday, Oct 26 (US time),
-  which is Oct 27 in Asia. The film uses Oct 26.
-* **ETH date.** The film shows the discovery date (Oct 16) for both labs as a photo-finish "replay",
-  with the announcement dates (Oct 26 / Oct 27) on the card.
-* **The line.** It is real data, not an illustration. x is linear calendar time and y is the
-  cumulative count of the landmarks above, joined with monotone (PCHIP) interpolation. The hockey stick
-  appears because the dates are what they are.
-* **The Lean card** types only the Lean 4 statement of IMO 2024 P1 (answer: α is an even
-  integer). The compute clock dramatizes the "up to 3 days per problem" constraint.
-* **IMO 2025 P2** is drawn from the official statement (circles Ω, Γ; points A–F; P the
-  circumcentre of ACD; H the orthocentre of PMN). The construction is computed exactly, and the
-  tangency of the line through H to circle BEF holds to ~1e-15
-  ([AoPS](https://artofproblemsolving.com/wiki/index.php/2025_IMO_Problems/Problem_2)).
-* **The Jacobian warp** is an illustrative polynomial deformation. It is not the published counterexample.
-* **Percolation** is a real simulation: bond percolation on a 10³ lattice at p = 0.2488 ≈ p_c(ℤ³),
-  with clusters found by union-find and the largest one lit.
+* **Yang–Mills date.** The brief said 10.27. OpenAI's post went out on Oct 26 (US time), so the film
+  uses 2026.10.26. Anthropic's ETH paper followed on Oct 27, so the climax lands on 2026.10.27.
+* **The curve.** x is linear calendar time. y is a stylized "capability" axis: one step per
+  milestone, growing geometrically, joined by monotone PCHIP. No y values are shown. The bend from
+  flat to vertical comes from the dates themselves: 47 years between the first two milestones, five
+  months between the last seven.
+* **Percolation island.** The terrain is a stage (value noise). The "trees" are the real thing:
+  site percolation on ℤ³ at p_c ≈ 0.3116 in a 16-voxel slab, with clusters found by union-find.
+  Only clusters rooted on the ground are kept, and the largest is lit gold. Every cluster ends.
+* **Erdős figure.** The figure is Erdős's 1946 grid construction (a 15 × 15 grid, unit = 5, which is
+  3-4-5 in four ways), not the 2026 construction, which lifts the same idea to higher-degree
+  number fields. The caption says the grid was beaten.
+* **Jacobian figure.** The grid flows from p to F(p) under the real map. It is drawn through a radial
+  squash so the map's degree-7 growth stays on screen. The three points meet exactly.
+* **Navier–Stokes, Yang–Mills, ETH tree.** These are illustrations of the objects involved: a
+  vortex tube that concentrates and bursts, a 4D hypercubic lattice, and a 2^n search tree. They
+  are not depictions of the proofs.

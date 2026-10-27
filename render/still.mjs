@@ -1,23 +1,27 @@
-// Render individual frames to PNG for review.
-// usage: node render/still.mjs <outdir> <spec...>   spec: frame number, "t12.5" (seconds) or "b16" (bars)
+// Render single frames to PNG.
+// usage: node render/still.mjs <outdir> [--scale 0.5] <spec...>
+//   spec: b12.5 (bar), t30 (seconds), 1234 (frame number)
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { startServer, openFilm, grabFrame } from './browser.mjs';
 
-const [outDir, ...specs] = process.argv.slice(2);
-fs.mkdirSync(outDir, { recursive: true });
-const BAR = 240 / 110, FPS = 60;
-const frames = specs.map((s) => s.startsWith('t') ? Math.round(parseFloat(s.slice(1)) * FPS) : s.startsWith('b') ? Math.round(parseFloat(s.slice(1)) * BAR * FPS) : parseInt(s, 10));
+const argv = process.argv.slice(2);
+let scale = 0.5;
+const i = argv.indexOf('--scale');
+if (i >= 0) { scale = Number(argv[i + 1]); argv.splice(i, 2); }
+const [out, ...specs] = argv;
+fs.mkdirSync(out, { recursive: true });
+const FPS = 60, BAR = 5498 / 60 / 42;
+const frameOf = (s) => s.startsWith('b') ? Math.round(Number(s.slice(1)) * BAR * FPS) : s.startsWith('t') ? Math.round(Number(s.slice(1)) * FPS) : Number(s);
 const { server, port } = await startServer();
-const { browser, page, size } = await openFilm(port);
-for (const n of frames) {
-  const t0 = Date.now();
+const { browser, page, sizeStr } = await openFilm(port, { scale });
+for (const s of specs) {
+  const n = frameOf(s);
   const { buf, stats } = await grabFrame(page, n);
-  const file = path.join(outDir, `f${String(n).padStart(5, '0')}.png`);
-  const r = spawnSync('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'yuv420p', '-s', size, '-color_range', 'tv', '-colorspace', 'bt709', '-i', '-', '-vf', 'scale=in_range=tv:out_range=pc:in_color_matrix=bt709,format=rgb24', file], { input: buf });
-  if (r.status) console.log(r.stderr.toString());
-  console.log(`frame ${n} (b=${(n / FPS / BAR).toFixed(2)}) ${Date.now() - t0} ms, blur x${stats.samples}, gpu ${stats.ms.toFixed(0)} ms -> ${file}`);
+  const file = path.join(out, `${s}.png`);
+  spawnSync('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'yuv420p', '-s', sizeStr, '-color_range', 'tv', '-colorspace', 'bt709', '-i', '-', '-vf', 'scale=in_range=tv:in_color_matrix=bt709:out_range=pc', '-frames:v', '1', file], { input: buf });
+  console.log(file, JSON.stringify(stats));
 }
 await browser.close();
 server.close();

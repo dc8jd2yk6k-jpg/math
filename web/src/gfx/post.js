@@ -1,299 +1,238 @@
-// HDR post pipeline: scene (half float) -> optional sub-frame accumulation
-// (true motion blur) -> dual-filter bloom -> composite (tonemap, chromatic
-// aberration, glitch, grain, vignette, flash, HUD) -> dithered output or a
-// GPU-packed YUV420 frame for lossless capture.
+// HDR pipeline: scene -> (motion-blur accumulation) -> bloom mip chain ->
+// composite (exposure, chromatic aberration, ACES, grain, vignette, HUD) ->
+// screen, or a GPU-packed YUV420 buffer for the encoder.
 import * as THREE from 'three';
 
-const FS_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+const VS = /* glsl */`varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
-class FullScreen {
-  constructor(fs, uniforms = {}, opts = {}) {
-    this.mat = new THREE.ShaderMaterial({
-      vertexShader: FS_VS, fragmentShader: fs, uniforms,
-      depthTest: false, depthWrite: false, blending: opts.blending ?? THREE.NoBlending, transparent: !!opts.blending,
-    });
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
-    this.mesh = new THREE.Mesh(g, this.mat);
-    this.mesh.frustumCulled = false;
-    this.scene = new THREE.Scene();
-    this.scene.add(this.mesh);
-    this.cam = new THREE.Camera();
-  }
-  get u() { return this.mat.uniforms; }
-  render(renderer, target) {
-    renderer.setRenderTarget(target);
-    renderer.render(this.scene, this.cam);
-  }
+function pass(fs, uniforms, extra = {}) {
+  return new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: fs, uniforms, depthTest: false, depthWrite: false, ...extra });
 }
 
-const rtOpts = (type = THREE.HalfFloatType) => ({
-  type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
-  depthBuffer: false, stencilBuffer: false, generateMipmaps: false,
-});
-
-const DOWN_FS = /* glsl */`
-  uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uPrefilter; uniform float uThreshold; uniform float uKnee;
-  varying vec2 vUv;
+const DOWN = /* glsl */`
+  uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uKaris; varying vec2 vUv;
   vec3 s(vec2 o) { return texture2D(tSrc, vUv + o * uTexel).rgb; }
+  float lw(vec3 c) { return 1.0 / (1.0 + dot(c, vec3(0.2126, 0.7152, 0.0722))); }
   void main() {
-    if (uPrefilter > 0.5) {
-      // first level: 4 bilinear taps = box over 4x4 source texels, then soft threshold
-      vec3 col = (s(vec2(-1.0, -1.0)) + s(vec2(1.0, -1.0)) + s(vec2(-1.0, 1.0)) + s(vec2(1.0, 1.0))) * 0.25;
-      float br = max(col.r, max(col.g, col.b));
-      float soft = clamp(br - uThreshold + uKnee, 0.0, 2.0 * uKnee);
-      soft = soft * soft / (4.0 * uKnee + 1e-4);
-      col *= max(soft, br - uThreshold) / max(br, 1e-4);
-      gl_FragColor = vec4(min(col, vec3(60.0)), 1.0);
-      return;
+    vec3 a = s(vec2(-2, 2)), b = s(vec2(0, 2)), c = s(vec2(2, 2));
+    vec3 d = s(vec2(-2, 0)), e = s(vec2(0, 0)), f = s(vec2(2, 0));
+    vec3 g = s(vec2(-2, -2)), h = s(vec2(0, -2)), i = s(vec2(2, -2));
+    vec3 j = s(vec2(-1, 1)), k = s(vec2(1, 1)), l = s(vec2(-1, -1)), m = s(vec2(1, -1));
+    vec3 o;
+    if (uKaris > 0.5) {
+      vec3 g0 = (a + b + d + e) * 0.25, g1 = (b + c + e + f) * 0.25, g2 = (d + e + g + h) * 0.25, g3 = (e + f + h + i) * 0.25, g4 = (j + k + l + m) * 0.25;
+      float w0 = lw(g0), w1 = lw(g1), w2 = lw(g2), w3 = lw(g3), w4 = lw(g4);
+      o = (g0 * w0 * 0.125 + g1 * w1 * 0.125 + g2 * w2 * 0.125 + g3 * w3 * 0.125 + g4 * w4 * 0.5) / (w0 * 0.125 + w1 * 0.125 + w2 * 0.125 + w3 * 0.125 + w4 * 0.5);
+    } else {
+      o = e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
     }
-    // 13-tap downsample (Jimenez 2014)
-    vec3 a = s(vec2(-2.0, 2.0)), b = s(vec2(0.0, 2.0)), c = s(vec2(2.0, 2.0));
-    vec3 d = s(vec2(-2.0, 0.0)), e = s(vec2(0.0, 0.0)), f = s(vec2(2.0, 0.0));
-    vec3 g = s(vec2(-2.0, -2.0)), h = s(vec2(0.0, -2.0)), i = s(vec2(2.0, -2.0));
-    vec3 j = s(vec2(-1.0, 1.0)), k = s(vec2(1.0, 1.0)), l = s(vec2(-1.0, -1.0)), m = s(vec2(1.0, -1.0));
-    vec3 col = e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
-    gl_FragColor = vec4(col, 1.0);
+    gl_FragColor = vec4(max(o, 0.0), 1.0);
   }`;
 
-const UP_FS = /* glsl */`
-  uniform sampler2D tSmall; uniform sampler2D tBase; uniform vec2 uTexel; uniform float uScatter;
-  varying vec2 vUv;
-  vec3 s(vec2 o) { return texture2D(tSmall, vUv + o * uTexel).rgb; }
+// full -> quarter resolution: four bilinear taps cover a 4x4 block; Karis
+// weighting keeps single hot pixels (the head) from flickering
+const DOWN4 = /* glsl */`
+  uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
+  float lw(vec3 c) { return 1.0 / (1.0 + dot(c, vec3(0.2126, 0.7152, 0.0722))); }
   void main() {
-    vec3 t = s(vec2(-0.5, -0.5)) + s(vec2(0.5, -0.5)) + s(vec2(-0.5, 0.5)) + s(vec2(0.5, 0.5));
-    gl_FragColor = vec4(texture2D(tBase, vUv).rgb + t * 0.25 * uScatter, 1.0);
+    vec3 a = texture2D(tSrc, vUv + vec2(-1.0, -1.0) * uTexel).rgb;
+    vec3 b = texture2D(tSrc, vUv + vec2(1.0, -1.0) * uTexel).rgb;
+    vec3 c = texture2D(tSrc, vUv + vec2(-1.0, 1.0) * uTexel).rgb;
+    vec3 d = texture2D(tSrc, vUv + vec2(1.0, 1.0) * uTexel).rgb;
+    a = min(a, vec3(24.0)); b = min(b, vec3(24.0)); c = min(c, vec3(24.0)); d = min(d, vec3(24.0));
+    float wa = lw(a), wb = lw(b), wc = lw(c), wd = lw(d);
+    gl_FragColor = vec4((a * wa + b * wb + c * wc + d * wd) / (wa + wb + wc + wd), 1.0);
   }`;
 
-const ACCUM_FS = /* glsl */`
-  uniform sampler2D tSrc; uniform float uWeight; varying vec2 vUv;
-  void main() { gl_FragColor = vec4(texture2D(tSrc, vUv).rgb * uWeight, 1.0); }`;
+const UP = /* glsl */`
+  uniform sampler2D tSrc; uniform sampler2D tBase; uniform vec2 uTexel; uniform float uRadius; varying vec2 vUv;
+  vec3 s(vec2 o) { return texture2D(tSrc, vUv + o * uTexel * uRadius).rgb; }
+  void main() {
+    vec3 o = s(vec2(0, 0)) * 4.0 + (s(vec2(-1, 0)) + s(vec2(1, 0)) + s(vec2(0, -1)) + s(vec2(0, 1))) * 2.0
+           + s(vec2(-1, -1)) + s(vec2(1, -1)) + s(vec2(-1, 1)) + s(vec2(1, 1));
+    gl_FragColor = vec4(o / 16.0 + texture2D(tBase, vUv).rgb, 1.0);
+  }`;
 
-const COMPOSITE_FS = /* glsl */`
-  uniform sampler2D tScene; uniform sampler2D tBloom; uniform sampler2D tHud;
-  uniform vec2 uRes; uniform float uFrame;
-  uniform float uExposure; uniform float uBloom; uniform float uCA; uniform float uGlitch; uniform float uGlitchSeed;
+const COMPOSITE = /* glsl */`
+  uniform sampler2D tHDR; uniform sampler2D tBloom; uniform sampler2D tHUD;
+  uniform vec2 uRes; uniform float uExposure; uniform float uBloom; uniform float uCA; uniform float uHudCA;
   uniform float uGrain; uniform float uVignette; uniform float uFlash; uniform vec3 uFlashColor;
-  uniform float uHudAlpha; uniform float uHudGlitch; uniform float uFade; uniform float uScan; uniform float uSat;
-  uniform float uLetterbox;
+  uniform float uFade; uniform float uSat; uniform float uFrame; uniform float uHud; uniform float uLift;
   varying vec2 vUv;
-
-  float h12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-  float h11(float p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
-
-  vec3 aces(vec3 x) {   // Narkowicz ACES fit with a gentle shoulder
-    const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-  }
-  vec2 glitchUV(vec2 uv, float amt, float seed) {
-    if (amt <= 0.0) return uv;
-    float rows = 24.0 + 40.0 * h11(seed);
-    float row = floor(uv.y * rows);
-    float r = h11(row * 1.37 + seed * 7.1);
-    float on = step(1.0 - 0.35 * amt, r);
-    uv.x += on * (h11(row + seed) - 0.5) * 0.12 * amt;
-    float blk = step(0.93, h12(floor(uv * vec2(12.0, 7.0)) + seed));
-    uv += blk * amt * (vec2(h11(seed + row), h11(seed - row)) - 0.5) * 0.04;
-    return uv;
-  }
+  vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+  float hash(vec2 p) { p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
+  vec3 srgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
   void main() {
-    vec2 uv = vUv;
-    vec2 guv = glitchUV(uv, uGlitch, uGlitchSeed);
-    vec2 cc = guv - 0.5;
-    float r2 = dot(cc, cc);
-    vec2 caOff = cc * (uCA * (0.004 + 0.02 * r2)) + vec2(uGlitch * 0.006, 0.0);
-    vec3 col, bl;
-    if (uCA > 0.02 || uGlitch > 0.0) {
-      col.r = texture2D(tScene, guv + caOff).r;
-      col.g = texture2D(tScene, guv).g;
-      col.b = texture2D(tScene, guv - caOff).b;
-      bl.r = texture2D(tBloom, guv + caOff * 2.0).r;
-      bl.g = texture2D(tBloom, guv).g;
-      bl.b = texture2D(tBloom, guv - caOff * 2.0).b;
-    } else {
-      col = texture2D(tScene, guv).rgb;
-      bl = texture2D(tBloom, guv).rgb;
-    }
-    col += bl * uBloom;
-    col *= uExposure * (1.0 + uFlash * 2.6);     // flashes are exposure spikes: highlights bloom, blacks stay black
-    col = aces(col);
-    float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-    col = mix(vec3(l), col, uSat);
-    // vignette
-    float vig = smoothstep(0.95, 0.25, length(cc * vec2(1.0, 0.82)));
-    col *= mix(1.0, vig, uVignette);
-    // scanlines (subtle, only during glitch)
-    col *= 1.0 - uScan * 0.12 * (0.5 + 0.5 * sin(uv.y * uRes.y * 3.14159));
-    // HUD (premultiplied alpha), with its own glitch + chromatic split
-    vec4 hud;
-    if (uHudGlitch > 0.01) {
-      vec2 huv = glitchUV(uv, uHudGlitch, uGlitchSeed + 3.0);
-      float hs = uHudGlitch * 0.004 + 0.0006;
-      vec4 hg = texture2D(tHud, huv);
-      vec4 hr = texture2D(tHud, huv + vec2(hs, 0.0));
-      vec4 hb = texture2D(tHud, huv - vec2(hs, 0.0));
-      hud = vec4(hr.r, hg.g, hb.b, max(hg.a, max(hr.a, hb.a))) * uHudAlpha;
-    } else hud = texture2D(tHud, uv) * uHudAlpha;
-    if (hud.a > 1e-4) hud.rgb = pow(clamp(hud.rgb / hud.a, 0.0, 1.0), vec3(2.2)) * hud.a;   // sRGB canvas -> linear
-    col = col * (1.0 - hud.a) + hud.rgb;
-    // fade to black
-    col *= uFade;
-    // letterbox bars
-    if (uLetterbox > 0.0 && (uv.y < uLetterbox || uv.y > 1.0 - uLetterbox)) col = vec3(0.0);
-    // grain (luma-weighted so blacks stay clean-ish)
-    float n = h12(uv * uRes + uFrame * 17.31) - 0.5;
-    col += n * uGrain * (0.25 + 0.75 * (1.0 - abs(l - 0.5) * 2.0));
-    // encode to sRGB and dither into the 8-bit target
-    col = clamp(col, 0.0, 1.0);
-    col = mix(col * 12.92, 1.055 * pow(col, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, col));
-    float d = (h12(gl_FragCoord.xy + uFrame * 3.7) + h12(gl_FragCoord.xy * 1.7 - uFrame) - 1.0) / 255.0;
-    gl_FragColor = vec4(col + d, 1.0);
+    vec2 d = vUv - 0.5;
+    vec2 off = d * uCA * (0.4 + 2.0 * dot(d, d));
+    vec3 c = vec3(texture2D(tHDR, vUv - off).r, texture2D(tHDR, vUv).g, texture2D(tHDR, vUv + off).b);
+    c = min(c, vec3(48.0));
+    c += texture2D(tBloom, vUv).rgb * uBloom;
+    c *= uExposure;
+    c += uFlashColor * uFlash;
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = mix(vec3(l), c, uSat);
+    c = aces(c) + uLift;
+    float vig = smoothstep(0.95, 0.25, length(d * vec2(1.0, 0.82)));
+    c *= mix(1.0, vig, uVignette);
+    c = srgb(clamp(c, 0.0, 1.0));
+    // overlay with a slight colour split
+    vec2 hoff = vec2(uHudCA / uRes.x, 0.0);
+    vec2 hv = vec2(vUv.x, 1.0 - vUv.y);
+    vec4 h = texture2D(tHUD, hv);
+    float hr = texture2D(tHUD, hv - hoff).a;
+    float hb = texture2D(tHUD, hv + hoff).a;
+    vec3 hc = h.rgb;
+    vec3 ha = vec3(max(h.a, hr * 0.85), h.a, max(h.a, hb * 0.85)) * uHud;
+    c = c * (1.0 - ha) + hc * ha;
+    c += (hash(gl_FragCoord.xy + uFrame * 17.31) - 0.5) * uGrain;
+    gl_FragColor = vec4(c * uFade, 1.0);
   }`;
 
-const OUT_FS = /* glsl */`
-  uniform sampler2D tSrc; uniform vec2 uRes; uniform float uFrame; varying vec2 vUv;
-  float h12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-  vec3 srgb(vec3 c) { c = clamp(c, 0.0, 1.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
-  void main() { gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, 1.0); }`;
-
-// Packs the frame into planar YUV420 (BT.709, limited range) inside an RGBA8
-// target of size (W/4) x (1.5 H): rows [0,H) = Y, then U (H/4 rows), then V.
-const YUV_FS = /* glsl */`
-  uniform sampler2D tSrc; uniform vec2 uRes; uniform float uFrame;
-  varying vec2 vUv;
-  float h12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-  vec3 srgb(vec3 c) { c = clamp(c, 0.0, 1.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
-  vec3 px(vec2 p) { return texture2D(tSrc, (p + 0.5) / uRes).rgb; }   // p in texture pixels (sRGB-encoded source)
-  float Y(vec3 c) { return 16.0 + 219.0 * dot(c, vec3(0.2126, 0.7152, 0.0722)); }
-  float U(vec3 c) { return 128.0 + 224.0 * dot(c, vec3(-0.114572, -0.385428, 0.5)); }
-  float V(vec3 c) { return 128.0 + 224.0 * dot(c, vec3(0.5, -0.454153, -0.045847)); }
-  float dith(vec2 p, float s) { return h12(p + uFrame * 1.618 + s) + h12(p * 1.31 - uFrame + s) - 1.0; }
-  vec3 avg2(vec2 c) {   // 2x2 block average in one bilinear fetch at the shared corner
-    return texture2D(tSrc, (c * 2.0 + 1.0) / uRes).rgb;
+// planar YUV420 (BT.709 limited) packed 4 bytes per RGBA texel, stream order = readPixels order
+const YUV = /* glsl */`
+  uniform sampler2D tSrc; uniform vec2 uRes; varying vec2 vUv;
+  vec3 px(float x, float y) { return texture2D(tSrc, vec2((x + 0.5) / uRes.x, 1.0 - (y + 0.5) / uRes.y)).rgb; }
+  float Y(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+  float chroma(float k, int which) {
+    float cw = uRes.x * 0.5;
+    float cy = floor(k / cw), cx = k - cy * cw;
+    vec3 c = (px(2.0 * cx, 2.0 * cy) + px(2.0 * cx + 1.0, 2.0 * cy) + px(2.0 * cx, 2.0 * cy + 1.0) + px(2.0 * cx + 1.0, 2.0 * cy + 1.0)) * 0.25;
+    float y = Y(c);
+    float v = which == 0 ? (c.b - y) / 1.8556 : (c.r - y) / 1.5748;
+    return (128.0 + 224.0 * v) / 255.0;
   }
   void main() {
-    float W = uRes.x, H = uRes.y;
-    float tx = floor(gl_FragCoord.x), ty = floor(gl_FragCoord.y);   // texel coords in the pack target
+    float col = floor(gl_FragCoord.x), row = floor(gl_FragCoord.y);
     vec4 o;
-    if (ty < H) {
-      float iy = ty;                       // image row (top = 0); readPixels returns row 0 first
-      for (int k = 0; k < 4; k++) {
-        vec2 p = vec2(tx * 4.0 + float(k), iy);
-        float v = Y(px(vec2(p.x, H - 1.0 - iy))) + dith(p, 0.0) * 0.5;
-        o[k] = clamp(floor(v + 0.5), 0.0, 255.0) / 255.0;
-      }
+    if (row < uRes.y) {
+      for (int i = 0; i < 4; i++) { float yv = (16.0 + 219.0 * Y(px(col * 4.0 + float(i), row))) / 255.0; if (i == 0) o.r = yv; else if (i == 1) o.g = yv; else if (i == 2) o.b = yv; else o.a = yv; }
     } else {
-      float cw = W * 0.5;
-      float rowsPer = (H * 0.25);
-      bool isV = ty >= H + rowsPer;
-      float r = ty - H - (isV ? rowsPer : 0.0);
-      float lin = (r * (W * 0.25) + tx) * 4.0;   // linear byte index in the chroma plane
-      for (int k = 0; k < 4; k++) {
-        float idx = lin + float(k);
-        float cy = floor((idx + 0.5) / cw), cx = idx - cy * cw;
-        vec3 c = avg2(vec2(cx, H * 0.5 - 1.0 - cy));
-        float v = (isV ? V(c) : U(c)) + dith(vec2(cx, cy), isV ? 7.0 : 3.0) * 0.5;
-        o[k] = clamp(floor(v + 0.5), 0.0, 255.0) / 255.0;
-      }
+      float q = uRes.y * 0.25;
+      int which = row < uRes.y + q ? 0 : 1;
+      float base = (row - uRes.y - (which == 0 ? 0.0 : q)) * uRes.x + col * 4.0;
+      o = vec4(chroma(base, which), chroma(base + 1.0, which), chroma(base + 2.0, which), chroma(base + 3.0, which));
     }
     gl_FragColor = o;
   }`;
 
 export class Post {
-  constructor(renderer, w, h) {
-    this.r = renderer; this.w = w; this.h = h;
-    this.sceneRT = new THREE.WebGLRenderTarget(w, h, { ...rtOpts(), depthBuffer: true });
-    this.accumRT = new THREE.WebGLRenderTarget(w, h, rtOpts());
-    this.finalRT = new THREE.WebGLRenderTarget(w, h, rtOpts(THREE.UnsignedByteType));   // sRGB-encoded, dithered
-    this.yuvRT = new THREE.WebGLRenderTarget(w / 4, h * 1.5, { ...rtOpts(THREE.UnsignedByteType), minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
-    this.levels = [];
-    let lw = w, lh = h;
-    for (let i = 0; i < 6; i++) {
-      lw = Math.max(2, Math.round(lw / 2)); lh = Math.max(2, Math.round(lh / 2));
-      this.levels.push({ down: new THREE.WebGLRenderTarget(lw, lh, rtOpts()), up: new THREE.WebGLRenderTarget(lw, lh, rtOpts()), w: lw, h: lh });
+  constructor(renderer, w, h, { msaa = 4 } = {}) {
+    this.r = renderer;
+    this.w = w; this.h = h;
+    const hf = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
+    this.sceneAA = msaa > 0 ? new THREE.WebGLRenderTarget(w, h, { ...hf, depthBuffer: true, samples: msaa }) : null;
+    this.scene = new THREE.WebGLRenderTarget(w, h, { ...hf, depthBuffer: true });
+    this.accum = new THREE.WebGLRenderTarget(w, h, hf);
+    this.mips = [];
+    this.ups = [];
+    let mw = w >> 2, mh = h >> 2;
+    for (let i = 0; i < 5; i++) {
+      this.mips.push(new THREE.WebGLRenderTarget(Math.max(1, mw), Math.max(1, mh), hf));
+      this.ups.push(new THREE.WebGLRenderTarget(Math.max(1, mw), Math.max(1, mh), hf));
+      mw >>= 1; mh >>= 1;
     }
-    this.down = new FullScreen(DOWN_FS, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uPrefilter: { value: 0 }, uThreshold: { value: 0.9 }, uKnee: { value: 0.6 } });
-    this.up = new FullScreen(UP_FS, { tSmall: { value: null }, tBase: { value: null }, uTexel: { value: new THREE.Vector2() }, uScatter: { value: 0.85 } });
-    this.accum = new FullScreen(ACCUM_FS, { tSrc: { value: null }, uWeight: { value: 1 } }, { blending: THREE.AdditiveBlending });
-    this.comp = new FullScreen(COMPOSITE_FS, {
-      tScene: { value: null }, tBloom: { value: null }, tHud: { value: null },
-      uRes: { value: new THREE.Vector2(w, h) }, uFrame: { value: 0 },
-      uExposure: { value: 1 }, uBloom: { value: 0.9 }, uCA: { value: 0.3 }, uGlitch: { value: 0 }, uGlitchSeed: { value: 0 },
-      uGrain: { value: 0.035 }, uVignette: { value: 0.55 }, uFlash: { value: 0 }, uFlashColor: { value: new THREE.Color(1, 1, 1) },
-      uHudAlpha: { value: 1 }, uHudGlitch: { value: 0 }, uFade: { value: 1 }, uScan: { value: 0 }, uSat: { value: 1 }, uLetterbox: { value: 0 },
-    });
-    this.out = new FullScreen(OUT_FS, { tSrc: { value: null }, uRes: { value: new THREE.Vector2(w, h) }, uFrame: { value: 0 } });
-    this.yuv = new FullScreen(YUV_FS, { tSrc: { value: null }, uRes: { value: new THREE.Vector2(w, h) }, uFrame: { value: 0 } });
+    this.ldr = new THREE.WebGLRenderTarget(w, h, { type: THREE.UnsignedByteType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false });
+    this.yuv = new THREE.WebGLRenderTarget(w / 4, h * 1.5, { type: THREE.UnsignedByteType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false });
     this.yuvBuf = new Uint8Array(w * h * 1.5);
-    this.bgColor = new THREE.Color(0, 0, 0);
-  }
 
-  // renderScene(sub) renders the 3D scene for sub-sample `sub` of `n` (motion blur)
-  renderHDR(scene, camera, n, prepare) {
-    const r = this.r;
-    r.setClearColor(this.bgColor, 1);
-    if (n <= 1) {
-      prepare(0);
-      r.setRenderTarget(this.sceneRT); r.clear(true, true, false);
-      r.render(scene, camera);
-      return this.sceneRT.texture;
-    }
-    r.setRenderTarget(this.accumRT); r.setClearColor(0x000000, 1); r.clear(true, false, false);
-    this.accum.u.uWeight.value = 1 / n;
-    for (let i = 0; i < n; i++) {
-      prepare((i + 0.5) / n - 0.5);
-      r.setClearColor(this.bgColor, 1);
-      r.setRenderTarget(this.sceneRT); r.clear(true, true, false);
-      r.render(scene, camera);
-      this.accum.u.tSrc.value = this.sceneRT.texture;
-      this.accum.render(r, this.accumRT);
-    }
-    return this.accumRT.texture;
-  }
+    this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+    this.quad.frustumCulled = false;
+    this.qscene = new THREE.Scene();
+    this.qscene.add(this.quad);
+    this.qcam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-  bloom(src, threshold = 0.85, knee = 0.6) {
-    const r = this.r;
-    let input = src, iw = this.w, ih = this.h;
-    this.levels.forEach((L, i) => {
-      this.down.u.tSrc.value = input;
-      this.down.u.uTexel.value.set(1 / iw, 1 / ih);
-      this.down.u.uPrefilter.value = i === 0 ? 1 : 0;
-      this.down.u.uThreshold.value = threshold; this.down.u.uKnee.value = knee;
-      this.down.render(r, L.down);
-      input = L.down.texture; iw = L.w; ih = L.h;
+    this.mCopy = pass(/* glsl */`uniform sampler2D tSrc; uniform float uW; varying vec2 vUv; void main() { gl_FragColor = vec4(texture2D(tSrc, vUv).rgb * uW, 1.0); }`,
+      { tSrc: { value: null }, uW: { value: 1 } }, { blending: THREE.AdditiveBlending, transparent: true });
+    this.mDown4 = pass(DOWN4, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+    this.mDown = pass(DOWN, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uKaris: { value: 0 } });
+    this.mUp = pass(UP, { tSrc: { value: null }, tBase: { value: null }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 1 } });
+    this.mComp = pass(COMPOSITE, {
+      tHDR: { value: null }, tBloom: { value: null }, tHUD: { value: null }, uRes: { value: new THREE.Vector2(w, h) },
+      uExposure: { value: 1 }, uBloom: { value: 0.06 }, uCA: { value: 0.002 }, uHudCA: { value: 1.2 }, uGrain: { value: 0.025 },
+      uVignette: { value: 0.35 }, uFlash: { value: 0 }, uFlashColor: { value: new THREE.Color(1, 1, 1) }, uFade: { value: 1 },
+      uSat: { value: 1 }, uFrame: { value: 0 }, uHud: { value: 1 }, uLift: { value: 0 },
     });
-    let small = this.levels[this.levels.length - 1].down;
-    for (let i = this.levels.length - 2; i >= 0; i--) {
-      const L = this.levels[i];
-      this.up.u.tSmall.value = small.texture;
-      this.up.u.tBase.value = L.down.texture;
-      this.up.u.uTexel.value.set(1 / small.width, 1 / small.height);
-      this.up.render(r, L.up);
-      small = L.up;
+    this.mYUV = pass(YUV, { tSrc: { value: null }, uRes: { value: new THREE.Vector2(w, h) } });
+    this.mBlit = pass(/* glsl */`uniform sampler2D tSrc; varying vec2 vUv; void main() { gl_FragColor = texture2D(tSrc, vUv); }`, { tSrc: { value: null } });
+  }
+
+  run(mat, target) {
+    this.quad.material = mat;
+    this.r.setRenderTarget(target);
+    this.r.render(this.qscene, this.qcam);
+  }
+
+  // render the scene n times (sub-frame times set by setSub(i/n)) and average
+  renderHDR(scene, camera, n, setSub, aa = false) {
+    const r = this.r;
+    if (n <= 1) {
+      const rt = aa && this.sceneAA ? this.sceneAA : this.scene;
+      setSub(0.5);
+      r.setRenderTarget(rt);
+      r.setClearColor(0x000000, 1);
+      r.clear(true, true, true);
+      r.render(scene, camera);
+      return rt.texture;
     }
-    return this.levels[0].up.texture;
-  }
-
-  composite(hdr, bloomTex, hudTex, params) {
-    const u = this.comp.u;
-    u.tScene.value = hdr; u.tBloom.value = bloomTex; u.tHud.value = hudTex;
-    for (const k in params) if (u[k] !== undefined) {
-      if (u[k].value && u[k].value.isColor) u[k].value.setRGB(...params[k]);
-      else u[k].value = params[k];
+    r.setRenderTarget(this.accum);
+    r.setClearColor(0x000000, 1);
+    r.clear(true, false, false);
+    for (let i = 0; i < n; i++) {
+      setSub((i + 0.5) / n);
+      r.setRenderTarget(this.scene);
+      r.clear(true, true, true);
+      r.render(scene, camera);
+      this.mCopy.uniforms.tSrc.value = this.scene.texture;
+      this.mCopy.uniforms.uW.value = 1 / n;
+      this.run(this.mCopy, this.accum);
     }
-    this.comp.render(this.r, this.finalRT);
+    return this.accum.texture;
   }
 
-  toScreen(frame) {
-    this.out.u.tSrc.value = this.finalRT.texture; this.out.u.uFrame.value = frame;
-    this.out.render(this.r, null);
+  bloom(src) {
+    let prev = src, pw = this.w, ph = this.h;
+    for (let i = 0; i < this.mips.length; i++) {
+      const m = i === 0 ? this.mDown4 : this.mDown;
+      m.uniforms.tSrc.value = prev;
+      m.uniforms.uTexel.value.set(1 / pw, 1 / ph);
+      if (i > 0) m.uniforms.uKaris.value = 0;
+      this.run(m, this.mips[i]);
+      prev = this.mips[i].texture;
+      pw = this.mips[i].width; ph = this.mips[i].height;
+    }
+    let up = this.mips[this.mips.length - 1].texture;
+    for (let i = this.mips.length - 2; i >= 0; i--) {
+      const src = this.mips[i + 1];
+      this.mUp.uniforms.tSrc.value = up;
+      this.mUp.uniforms.tBase.value = this.mips[i].texture;
+      this.mUp.uniforms.uTexel.value.set(1 / src.width, 1 / src.height);
+      this.run(this.mUp, this.ups[i]);
+      up = this.ups[i].texture;
+    }
+    return up;
   }
 
-  readYUV(frame) {
-    this.yuv.u.tSrc.value = this.finalRT.texture; this.yuv.u.uFrame.value = frame;
-    this.yuv.render(this.r, this.yuvRT);
-    this.r.readRenderTargetPixels(this.yuvRT, 0, 0, this.w / 4, this.h * 1.5, this.yuvBuf);
+  composite(hdr, bloom, hudTex, fx, target) {
+    const u = this.mComp.uniforms;
+    u.tHDR.value = hdr; u.tBloom.value = bloom; u.tHUD.value = hudTex;
+    for (const [k, v] of Object.entries(fx)) {
+      if (!u[k]) continue;
+      if (u[k].value && u[k].value.isColor) u[k].value.setRGB(...v);
+      else u[k].value = v;
+    }
+    this.run(this.mComp, target);
+  }
+
+  toScreen() {
+    this.mBlit.uniforms.tSrc.value = this.ldr.texture;
+    this.run(this.mBlit, null);
+  }
+
+  readYUV() {
+    this.mYUV.uniforms.tSrc.value = this.ldr.texture;
+    this.run(this.mYUV, this.yuv);
+    this.r.readRenderTargetPixels(this.yuv, 0, 0, this.w / 4, this.h * 1.5, this.yuvBuf);
     return this.yuvBuf;
   }
 }

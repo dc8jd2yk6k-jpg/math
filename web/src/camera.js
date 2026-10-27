@@ -1,126 +1,109 @@
-// One calm, continuous camera move. The camera works in the screen frame of
-// the line (U = direction of travel is always screen-up), so the line reads as
-// straight and vertical. During each milestone it settles on that object and
-// tracks the head only partly (kappa), so the head drifts up through the
-// object, as in the reference. Every parameter is an eased keyframe track.
+// One continuous camera. Shots are keyframes on the bar grid; every parameter
+// is interpolated with a monotone cubic over the keys (C1, no overshoot, and
+// periodic across the loop seam), so the camera never wobbles: it moves only
+// when a key asks it to. Whips are simply keys placed close together.
+//
+// Orbit parameters, all around a focus point:
+//   az    azimuth around world up (0 = looking at the chart from +z)
+//   el    elevation (+ above, looking down)
+//   dist  distance to the focus
+//   ox,oy where the focus sits on screen (-1..1)
+//   roll  degrees, fov vertical degrees
+// focus = lerp(anchor, head, kappa): anchor is a fixed point per key.
+// Path modes (the island fly-through) blend in on top with their own weight.
 import * as THREE from 'three';
-import { frameAt, headAt, storyAt } from './curve.js';
-import { keys, lerp, ease, smoothstep, clamp } from './util.js';
+import { loopTrack, wrap, N_BARS } from './time.js';
 
-const _m = new THREE.Matrix4();
+const DEG = Math.PI / 180;
+const PARAMS = ['az', 'el', 'dist', 'fov', 'roll', 'ox', 'oy', 'kappa', 'ax', 'ay', 'az_'];
 
-export class CameraRig {
-  constructor(pieces, chartCenter) {
-    const P = pieces;
-    const c = (p) => p.center.toArray();
-    // shot list: [b from, b to, settings]. Between shots everything eases.
-    // kappa = 1 follows the head; 0 holds on `center`; uRef = frame used for axes
-    const S = (a, z, o) => ({ a, z, ...o });
-    const H = { kappa: 1 };
-    this.shots = [
-      S(-1, 0, { ...H, dist: 22, yaw: 0, pitch: 0, fov: 40, lift: 0.06 }),
-      S(0.9, 1.0, { ...H, dist: 15, yaw: 6, pitch: 8, fov: 40, lift: 0.0 }),
-      S(1.0, 1.5, { ...H, dist: 13, yaw: 10, pitch: 12, fov: 40, lift: 0.0 }),
-      S(1.75, 1.75, { ...H, dist: 22, yaw: 4, pitch: 4, fov: 40, lift: 0.06 }),
-      S(2.05, 5.3, { kappa: 0.2, center: c(P.chess), u0: 3.0, dist: 29, yaw: -9, yaw2: 7, pitch: 3, fov: 40, lift: 0.0 }),
-      S(5.75, 5.75, { ...H, dist: 26, yaw: 0, pitch: 2, fov: 40, lift: 0.06 }),
-      S(6.05, 7.75, { kappa: 0.2, center: c(P.go), u0: 7.0, dist: 34, yaw: 7, yaw2: -4, pitch: 3, fov: 40, lift: 0.0 }),
-      S(8.0, 9.0, { kappa: 0.1, center: P.go.move37.toArray(), u0: 7.0, dist: 15, yaw: -8, yaw2: -14, pitch: 6, fov: 40, lift: 0.0 }),
-      S(9.65, 9.65, { ...H, dist: 26, yaw: 0, pitch: 0, fov: 40, lift: 0.08 }),
-      S(10.1, 13.75, { kappa: 0.35, center: c(P.lean), u0: 12.0, dist: 30, yaw: -6, yaw2: 5, pitch: 2, fov: 40, lift: 0.0 }),
-      S(14.05, 15.9, { kappa: 0.35, center: c(P.geometry), u0: 15.0, dist: 32, yaw: 4, yaw2: -4, pitch: 0, fov: 40, lift: 0.0 }),
-      S(16.1, 17.9, { kappa: 0.35, center: c(P.erdos), u0: 16.9, dist: 29, yaw: -5, yaw2: 5, pitch: 2, fov: 40, lift: 0.0 }),
-      S(18.1, 19.9, { kappa: 0.35, center: c(P.jacobian), u0: 18.9, dist: 27, yaw: 10, yaw2: -6, pitch: 6, fov: 40, lift: 0.0 }),
-      S(20.1, 21.9, { kappa: 0.35, center: c(P.percolation), u0: 20.9, dist: 32, yaw: -6, yaw2: 6, pitch: 8, fov: 40, lift: 0.0 }),
-      S(22.05, 22.95, { kappa: 0.35, center: c(P.navier), u0: 22.6, dist: 26, yaw: 3, yaw2: -3, pitch: 0, fov: 40, lift: 0.0 }),
-      S(23.05, 23.95, { kappa: 0.35, center: c(P.papers), u0: 23.45, dist: 27, yaw: -4, yaw2: 3, pitch: 0, fov: 40, lift: 0.0 }),
-      S(24.05, 24.9, { kappa: 0.35, center: c(P.yangmills), u0: 24.45, dist: 25, yaw: 6, yaw2: -6, pitch: 4, fov: 40, lift: 0.0 }),
-      S(25.05, 26.6, { kappa: 0.12, center: c(P.eth), u0: 25.5, dist: 46, yaw: -4, yaw2: 3, pitch: 2, fov: 40, lift: 0.0 }),
-      S(27.4, 29.5, { ...H, dist: 24, yaw: 0, yaw2: 6, pitch: 3, fov: 40, lift: 0.1 }),
-      S(35.4, 37, { ...H, dist: 22, yaw: 0, pitch: 0, fov: 40, lift: 0.06 }),
-    ];
-
-    this.chartCenter = chartCenter;
-    this.cam = new THREE.PerspectiveCamera(40, 9 / 16, 0.05, 8000);
-  }
-
-  // scalar/array track value at b: holds within a shot, eases between shots
-  track(b, name, fallback) {
-    const sh = this.shots;
-    const val = (s, t) => {
-      let v = s[name] ?? fallback;
-      if (name === 'yaw' && s.yaw2 !== undefined) v = lerp(s.yaw, s.yaw2, ease.inOutSine(clamp((t - s.a) / Math.max(1e-3, s.z - s.a))));
-      return v;
-    };
-    if (b <= sh[0].z) return val(sh[0], b);
-    for (let i = 0; i < sh.length; i++) {
-      const s = sh[i];
-      if (b >= s.a && b <= s.z) return val(s, b);
-      const n = sh[i + 1];
-      if (n && b > s.z && b < n.a) {
-        const w = ease.inOutCubic((b - s.z) / (n.a - s.z));
-        const a = val(s, s.z), c = val(n, n.a);
-        if (a === undefined || c === undefined) return a ?? c;
-        return Array.isArray(a) ? a.map((x, j) => lerp(x, c[j], w)) : lerp(a, c, w);
+export class Rig {
+  // keys: [{ b, focus: 'head' | THREE.Vector3, kappa?, az, el, dist, fov?, roll?, ox?, oy? }]
+  // headAt(b) -> Vector3
+  constructor(keys, headAt, { aspect = 9 / 16 } = {}) {
+    this.headAt = headAt;
+    this.cam = new THREE.PerspectiveCamera(40, aspect, 0.05, 20000);
+    const full = [];
+    let prev = { az: 0, el: 0, dist: 30, fov: 40, roll: 0, ox: 0, oy: 0 };
+    for (const k of [...keys].sort((a, b) => a.b - b.b)) {
+      const v = { ...prev, ...k };
+      for (const p of ['ox', 'oy', 'roll']) if (k[p] === undefined) v[p] = prev[p];
+      let anchor;
+      if (k.focus === 'head' || k.focus === undefined) {
+        anchor = headAt(k.b);
+        v.kappa = k.kappa ?? 1;
+      } else {
+        anchor = k.focus;
+        v.kappa = k.kappa ?? 0;
       }
+      v.ax = anchor.x; v.ay = anchor.y; v.az_ = anchor.z;
+      full.push(v);
+      prev = v;
     }
-    return val(sh[sh.length - 1], b);
+    this.keys = full;
+    this.tracks = {};
+    for (const p of PARAMS) this.tracks[p] = loopTrack(full.map((k) => [k.b, k[p]]));
+    this.paths = [];        // { weight(b) -> 0..1, pose(b) -> {pos, quat, fov} }
   }
 
-  // last defined centre / reference u (head-follow shots don't define them)
-  centerAt(b) {
-    const sh = this.shots;
-    let prev = null, next = null;
-    for (const s of sh) { if (s.center) { if (s.a <= b) prev = s; else if (!next) next = s; } }
-    if (!prev) return next ? next : null;
-    if (!next || b <= prev.z) return prev;
-    const w = ease.inOutCubic(clamp((b - prev.z) / (next.a - prev.z)));
-    return { center: prev.center.map((x, j) => lerp(x, next.center[j], w)), u0: lerp(prev.u0, next.u0, w) };
+  addPath(path) { this.paths.push(path); }
+
+  orbitPose(b) {
+    const t = this.tracks;
+    const az = t.az(b) * DEG, el = t.el(b) * DEG, dist = Math.max(0.05, t.dist(b));
+    const fov = t.fov(b), roll = t.roll(b) * DEG, ox = t.ox(b), oy = t.oy(b);
+    const kappa = Math.min(1, Math.max(0, t.kappa(b)));
+    const anchor = new THREE.Vector3(t.ax(b), t.ay(b), t.az_(b));
+    const focus = kappa > 0 ? anchor.lerp(this.headAt(b), kappa) : anchor;
+    // basis straight from the angles (never degenerate, even looking straight up/down)
+    const back = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
+    const right = new THREE.Vector3(Math.cos(az), 0, -Math.sin(az));
+    const up = new THREE.Vector3().crossVectors(back, right);
+    const pos = focus.clone().addScaledVector(back, dist);
+    const m = new THREE.Matrix4().makeBasis(right, up, back);
+    const q = new THREE.Quaternion().setFromRotationMatrix(m);
+    // put the focus at (ox, oy) on screen, then roll
+    const tv = Math.tan(fov * DEG / 2), th = tv * this.cam.aspect;
+    q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan(ox * th)));
+    q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.atan(oy * tv)));
+    if (roll) q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), roll));
+    return { pos, quat: q, fov, focus };
   }
 
-  followPose(b) {
-    const u = storyAt(b);
-    const kappa = this.track(b, 'kappa', 1);
-    const cs = this.centerAt(b);
-    const uRef = cs ? lerp(cs.u0, u, kappa) : u;
-    const f = frameAt(uRef);
-    const dist = this.track(b, 'dist', 22), yaw = this.track(b, 'yaw', 0), pitch = this.track(b, 'pitch', 0);
-    const fov = this.track(b, 'fov', 40), lift = this.track(b, 'lift', 0);
-    const head = headAt(u);
-    const visH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(fov) / 2);
-    const headFocus = head.clone().addScaledVector(f.U, -lift * visH);
-    const focus = cs ? new THREE.Vector3(...cs.center).lerp(headFocus, kappa) : headFocus;
-    const q = new THREE.Quaternion().setFromAxisAngle(f.U, THREE.MathUtils.degToRad(yaw))
-      .multiply(new THREE.Quaternion().setFromAxisAngle(f.R, THREE.MathUtils.degToRad(-pitch)));
-    const pos = focus.clone().add(f.F.clone().multiplyScalar(dist).applyQuaternion(q));
-    const up = f.U.clone().applyQuaternion(q);
-    return { pos, q: new THREE.Quaternion().setFromRotationMatrix(_m.lookAt(pos, focus, up)), fov };
+  pose(b) {
+    b = wrap(b);
+    let p = this.orbitPose(b);
+    for (const path of this.paths) {
+      const w = path.weight(b);
+      if (w <= 0) continue;
+      const q = path.pose(b);
+      if (w >= 1) { p = { ...q, focus: p.focus }; continue; }
+      p = { pos: p.pos.clone().lerp(q.pos, w), quat: p.quat.clone().slerp(q.quat, w), fov: p.fov + (q.fov - p.fov) * w, focus: p.focus };
+    }
+    return p;
   }
 
-  revealPose(b) {
-    const c = this.chartCenter;
-    const k = ease.inOutSine(smoothstep(30.5, 34.5, b));
-    const tgt = new THREE.Vector3(c.x, c.y + 6 * k, 0);
-    const pos = new THREE.Vector3(c.x + 6 - 4 * k, c.y - 8 + 3 * k, 470 + 20 * k);
-    return { pos, q: new THREE.Quaternion().setFromRotationMatrix(_m.lookAt(pos, tgt, new THREE.Vector3(0, 1, 0))), fov: 40 };
-  }
-
-  evaluate(b) {
-    const w = ease.inOutCubic(smoothstep(29.6, 31.8, b)) * (1 - ease.inOutCubic(smoothstep(33.9, 35.4, b)));
-    const f = this.followPose(b);
-    if (w <= 0) return f;
-    const r = this.revealPose(b);
-    if (w >= 1) return r;
-    return { pos: f.pos.clone().lerp(r.pos, w), q: f.q.clone().slerp(r.q, w), fov: lerp(f.fov, r.fov, w) };
-  }
-
+  // set the THREE camera for bar b; fx: { punch (deg), shake: Vector3 offset, shakeRot (rad) }
   apply(b, fx = {}) {
-    const p = this.evaluate(b);
-    this.cam.position.copy(p.pos);
-    this.cam.quaternion.copy(p.q);
-    this.cam.fov = p.fov + (fx.punch || 0);
-    this.cam.updateProjectionMatrix();
-    this.cam.updateMatrixWorld(true);
-    return this.cam;
+    const p = this.pose(b);
+    const c = this.cam;
+    c.position.copy(p.pos);
+    if (fx.shake) c.position.add(fx.shake);
+    c.quaternion.copy(p.quat);
+    if (fx.shakeRot) c.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(fx.shakeRot.x, fx.shakeRot.y, fx.shakeRot.z)));
+    c.fov = Math.max(5, p.fov - (fx.punch || 0));
+    c.near = fx.near ?? Math.max(0.03, Math.min(2, p.pos.distanceTo(p.focus) * 0.01));
+    c.far = fx.far ?? 30000;
+    c.updateProjectionMatrix();
+    c.updateMatrixWorld(true);
+    return c;
+  }
+
+  // angular + linear speed of the camera around bar b (for motion-blur sampling)
+  speed(b, db) {
+    const a = this.pose(b - db / 2), c = this.pose(b + db / 2);
+    return { ang: a.quat.angleTo(c.quat), lin: a.pos.distanceTo(c.pos), dist: a.pos.distanceTo(a.focus) };
   }
 }
+
+export { N_BARS };

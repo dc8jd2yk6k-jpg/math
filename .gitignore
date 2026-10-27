@@ -1,8 +1,9 @@
 node_modules/
 .render/
-dist/*.mp4
+dist/
+__pycache__/
 # The soundtrack is an edit of copyrighted music (Brian Tyler's F1 theme).
-# It is rebuilt locally from your own copy with audio/build_soundtrack.py.
+# Rebuild it locally from your own copy with audio/build.py.
 assets/audio/*.wav
 assets/audio/*.m4a
 assets/audio/*.mp3

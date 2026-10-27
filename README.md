@@ -1,92 +1,100 @@
 # Δt → 0
 
-**One line. One take. AI × mathematics, 1950 → 2026.**
+**One line, one take, AI × mathematics, 1950 → 2026.**
 
-A 78.5-second vertical (9:16) motion film rendered in real-time WebGL and locked to the F1 theme.
-A thin straight line with a red head travels through black space. At each milestone one object
-appears beside it: a lit chessboard showing Deep Blue–Kasparov Game 6, AlphaGo's Move 37, a Lean
-proof card, the IMO 2025 geometry figure, and the frontier results of 2026 arriving months, then
-weeks, then days apart. At the end the camera pulls back, and the straight line turns out to be the
-vertical wall of an exponential plotted on a **linear time axis**. The film then rewinds to 1950 and
-loops forever.
+A 91.6-second vertical (1080 × 1920, 60 fps) motion film, rendered in real-time WebGL, cut to the
+Formula 1 theme and looping seamlessly.
+
+A red head draws a thin, luminous trail through black space. The trail is one curve in 3D: x is
+linear calendar time, and the height grows with every landmark result. A free chase camera follows
+the head. Early on the trail runs almost flat across the frame: Shannon in 1950, then the 47-year
+dash to Deep Blue. It tilts upward at AlphaGo, climbs through the IMO years, and from 2026 it is
+a vertical wall. Breakthroughs then arrive months, weeks and finally hours apart. Each milestone is
+an object threaded on the line, and each one stays there. The final pull-back shows the whole
+trajectory on a 1950–2026 axis: an exponential explosion. Then the camera dives into the floating
+voxel island on the wall, which is where the film began.
 
 ```
-1950 ─── 1997 ─────── 2016 ──── 2024 ─ 2025 ─ May ─ Jul ─ Aug ─ Sep 8 ─ Oct 6 ─ Oct 26 ─ Oct 16|16
-Shannon  Deep Blue    AlphaGo   IMO 🥈  IMO 🥇  Erdős  Jacobian  Perc.  N–S    722    Yang–Mills  ETH ✕
+1950 ──── 1997 ──── 2016 ── 2024.07 ─ 2025.07 ─ 05 ─ 07 ─ 08 ─ 09.08 ─ 10.06 ─ 10.26 ─ 10.27
+Shannon  Deep Blue  AlphaGo  IMO 🥈    IMO 🥇   Erdős Jacobian Perc. N–S   722 papers  Yang–Mills ETH
 ```
 
-## Design
+## What is real
 
-| Idea | How it's built |
+| Scene | The object |
 |---|---|
-| **One line, no wobble.** | The line is the data: x is linear calendar time, and y is the cumulative count of the landmarks, joined with monotone PCHIP interpolation. The camera always looks along it, so up close it reads as straight and vertical. Only the final pull-back shows the curve flat for decades and then vertical. |
-| **One object per beat.** | Black space, sparse stars, nothing else. The chessboard and Go board are lit, realistic PBR. Everything else is white line art drawn stroke by stroke. The only colour is the red head. |
-| **Three lines of type.** | A date in light mono that rolls between milestones (its last changing digit scrambles), a bold title, and a one-line grey caption. Small italic labels sit next to objects. |
-| **Beat-locked.** | The F1 theme was measured at exactly 110 BPM, with bar 0 at 11.611 s. Every object, stroke, stone and title change lands on a bar or 16th-note position of the 36-bar edit. |
-| **Exact loop.** | Frame 0 is the end state: the head at the top of the curve on 2026.10.27. Over the first bar the date rewinds and the line retracts to 1950. The last frame is pose-for-pose the first, and the audio edit loops on the bar grid. |
-| **Real artifacts.** | Game 6's final position (replayed with python-chess). Game 2's first 37 moves (BGA record). The actual IMO 2025 P2 construction (the tangency is checked numerically, with error ~1e-15). A real unit-distance graph (the 7-cube with unit edges). A genuine percolation simulation at p = 0.2488. |
-| **Honest captions.** | 2026 results carry their status as of 2026-10-27 ("under expert review", "mass gap not claimed"). See [SOURCES.md](SOURCES.md). |
+| Deep Blue | The final position of Game 6 (after 19.c4), replayed with python-chess; the black king tips over on the downbeat |
+| AlphaGo | Game 2, moves 1–37, landing on the sixteenth notes; Move 37 lands on the downbeat of bar 8 |
+| IMO 2024 | The Lean 4 statement of Problem 1 typed into a glass card; P1 P2 P4 P6 = 28/42; compute clock to "up to 3 days" |
+| IMO 2025 | Problem 2 constructed exactly and drawn stroke by stroke; the final tangent holds to 1e-16 |
+| Erdős | Erdős's 1946 grid construction (unit = 5, i.e. 3-4-5 four ways), the family the 2026 result beats |
+| Jacobian | **The actual counterexample map** F: det J ≡ −2, yet F(0,0,−¼) = F(1,−3/2,13/2) = F(−1,3/2,13/2) |
+| Percolation | The island's trees are clusters of site percolation on ℤ³ at p_c ≈ 0.3116 (seeded simulation, union-find) |
+| Navier–Stokes | The forced equations; a vortex tube that tightens, spins up and bursts; "Lean · no goals ■" |
+| 722 manuscripts | 722 pages, a counter to 722 |
+| Yang–Mills | A 4D hypercubic lattice turning through the fourth dimension |
+| ETH | A 2^n search tree; two lab heads find short paths and reach the top a beat apart |
 
-## Structure (36 bars at 110 BPM)
+Every claim, date and review status is in [SOURCES.md](SOURCES.md) (checked on 2026-10-27).
 
-| Bars | Header | Object |
-|---|---|---|
-| 0–1 | 2026.10.27 → rewinding | the line retracts from today back to 1950 |
-| 1–2 | 1950 · Claude Shannon | red orbit rings around the head |
-| 2–6 | 1997 · Deep Blue | lit board, Game 6 final position; the black king tips over |
-| 6–10 | 2016 · AlphaGo | wooden board, Game 2 moves 1–37, white ring on Move 37 (bar 8) |
-| 10–14 | 2024.07 · IMO Silver | Lean 4 card for P1, a compute clock running to 72 h, P1 P2 P4 P6 ticked |
-| 14–16 | 2025.07 · IMO Gold | IMO 2025 P2 drawn stroke by stroke: Ω, Γ, A–H, the tangent |
-| 16–18 | 2026.05 · Erdős | unit-distance graph, edge by edge |
-| 18–20 | 2026.07 · Jacobian | a polynomial warp; three points meet in one |
-| 20–22 | 2026.08 · Percolation | 3D lattice at p_c, largest cluster lit |
-| 22–23 | 2026.09.08 · Navier–Stokes | a vortex stretches until it blows up; "Lean · no goals ■" |
-| 23–24 | 2026.10.06 · 722 Manuscripts | 722 pages fly into a wall |
-| 24–25 | 2026.10.26 · 4D Yang–Mills | a lattice rotating through the 4th dimension |
-| 25–30 | 2026.10.16 · ETH | the 2ⁿ tree; OpenAI and Anthropic reach the top on the same beat; the tree folds into the line |
-| 30–35 | 2026.10.27 · Δt → 0 | pull back: the whole line on a 1950–2026 axis |
-| 35–36 | 2026.10.27 | back to the head: frame 0 |
+## Sound and sync
+
+The edit is built from your copy of Brian Tyler's *Formula 1 Theme* (110 BPM, bar 0 at 11.611 s).
+It follows the reference film's cut: source bars 8–37½, then 41½–43½, then 47½–58. Every splice
+sits on the same chord on both sides. The loop seam (bar 58 → bar 8, both on D) is a crossfade with
+a reverb wash. Milestones land on downbeats: AlphaGo on the theme entry, the island on the climax
+drop, the pull-back on the breakdown. FOV punches and exposure kicks fire on brass hits detected in
+the audio. A synthesized sound layer adds whooshes on whips, booms on drops, a riser and a blow-up
+impact. The master is −14 LUFS.
 
 ## Run it
 
 ```bash
-npm install                       # three.js
-pip install librosa soundfile     # for the audio tools
+npm install                                   # three.js + fonts
+pip install librosa soundfile scipy chess     # audio tools (+ python-chess for the FEN check)
 
-# 1. Build the soundtrack edit from your own copy of the F1 theme (Brian Tyler).
-#    Produces assets/audio/soundtrack.wav (gitignored) + features.json
-python3 -I audio/build_soundtrack.py "/path/to/F1 Theme.m4a" assets/audio
+# 1. Build the soundtrack from your own copy of the F1 theme -> assets/audio/
+python3 -I audio/build.py "/path/to/F1 Theme.m4a"
+python3 -I audio/check_loop.py                # joins and loop seam
 
-# 2. Live, audio-synced player (space = play/pause, ←/→ = bar, H = hide UI)
-npm run serve                     # → http://localhost:8080/web/
+# 2. Live, audio-synced player (space play/pause, ←/→ bars, D debug, H hide text)
+npm run serve                                 # → http://localhost:8080/web/?scale=0.5
 
-# 3. Deterministic 1080×1920 @ 60 fps render (headless Chromium + ffmpeg)
-npm run render -- --workers 3     # → dist/delta-t-to-zero_1080x1920_60fps.mp4
-node render/still.mjs out/ b16 b26.5 t70   # single frames (bars, seconds or frame no.)
+# 3. Deterministic render: headless Chromium (software GL) → x264 → mux
+node render/render.mjs --workers 2            # → dist/delta-t_1080x1920_60fps.mp4
+node render/render.mjs --scale 0.4 --step 2   # quick 432x768 / 30 fps preview
+node render/still.mjs out/ b26.5 t70 1234     # stills (bar, seconds or frame)
+node render/sheet.mjs sheet.png               # 1 fps contact sheet
+node tools/check_loop.mjs                     # seam continuity + determinism
 ```
 
-## Architecture
+The soundtrack and the rendered MP4 are gitignored, because the music is copyrighted.
+
+## How it is built
 
 ```
-audio/   analyze_track.py    tempo/phase grid search, section map
-         build_soundtrack.py 36-bar edit, loop seam, -14 LUFS, per-frame features
-web/src/ curve.js            the line: PCHIP spine on linear time, story position u(b), frames
-         camera.js           keyframed shots: settle on each object, partial head tracking, reveal
-         film.js             director: lights for the boards, FX, labels, exact loop
-         world.js            stars, dust, the line (constant pixel width), the head, reveal axis
-         pieces/*.js         chess, go, imo (Lean card + IMO 2025 P2), frontier, eth (+ Shannon)
-         hud/                the three-line header and labels (Canvas2D)
-         gfx/glow.js         soft gaussian line/point primitives
-         gfx/post.js         HDR → bloom → ACES → grain → HUD → YUV420 pack
-render/  render.mjs          N browser workers × 4-s chunks → x264 → concat → mux
+web/score.json        the timing score: edit segments and sound cues (bars)
+web/src/time.js       bar clock, PCHIP, periodic keyframe tracks, audio features
+web/src/data.js       milestones, the Game 6 FEN, Game 2 moves, Lean P1, the Jacobian map
+web/src/curve.js      the curve: linear time × stylized height, arc-length tables
+web/src/story.js      where the head is at every bar; header windows; the date clock
+web/src/shots.js      the shot list (az / el / dist / fov / screen offset per key)
+web/src/camera.js     one camera: monotone-cubic tracks (no overshoot, C1 across the loop) + path modes
+web/src/world/        the trail (constant-pixel ribbon), the head, stars / dust streaks / sky
+web/src/pieces/       one module per milestone
+web/src/gfx/          HDR post (motion-blur accumulation, bloom, ACES, CA, grain), screen-space lines, GPU YUV packing
+web/src/hud/          the header (rolling date, typed title, caption), 3D-pinned labels, axis
+audio/                analysis of the source, the edit + sound design + loudness, join checks
+render/               static server, headless capture, chunked parallel x264 render, stills, sheets
 ```
 
-Everything on screen is a pure function of time, so rendering is deterministic, parallel and
-resumable chunk by chunk.
+Everything on screen is a pure function of the bar position, so any frame can be rendered at any
+time, in any order, in parallel. The camera's parameters are monotone cubic tracks over keyframes,
+copied one loop before and after, so motion stays smooth across the seam and never overshoots.
 
 ## Credits
 
-* Music: *Formula 1 Theme*, Brian Tyler. **Not included in this repository**; supply your own copy.
-* Fonts: Inter, JetBrains Mono, STIX Two (SIL Open Font License; see `assets/fonts`).
-* Engine: three.js. Analysis: librosa. Encoding: ffmpeg/x264.
-* Go record: British Go Association. Chess score: Deep Blue–Kasparov 1997, Game 6.
+* Music: *Formula 1 Theme*, Brian Tyler. **Not included**; supply your own copy.
+* Fonts (SIL OFL, via Fontsource): JetBrains Mono, Inter, Instrument Serif, STIX Two.
+* Engine: three.js. Audio analysis: librosa. Encoding: ffmpeg/x264.
+* Every frame is rendered in real time by code written by Claude.

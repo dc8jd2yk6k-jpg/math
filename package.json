@@ -1,14 +1,21 @@
 {
-  "name": "delta-t-to-zero",
-  "version": "1.0.0",
+  "name": "delta-t",
+  "version": "3.0.0",
   "private": true,
-  "description": "Δt → 0 — a single-take, beat-locked motion film about the acceleration of AI in mathematics.",
+  "description": "Δt → 0: a one-take, beat-locked, seamlessly looping WebGL film about AI and mathematics, 1950 to 2026.",
   "type": "module",
   "scripts": {
     "serve": "node render/serve.mjs",
-    "render": "node render/render.mjs"
+    "render": "node render/render.mjs",
+    "still": "node render/still.mjs",
+    "sheet": "node render/sheet.mjs"
   },
   "dependencies": {
-    "three": "0.170.0"
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/instrument-serif": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/stix-two-math": "5.3.0",
+    "@fontsource/stix-two-text": "5.3.0",
+    "three": "0.180.0"
   }
 }

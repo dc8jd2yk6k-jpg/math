@@ -1,81 +1,59 @@
-// Entry point: live player (audio-synced, scrubbable) and the deterministic
-// capture API used by render/render.mjs.
+// Entry point. Two modes:
+//   live player:  /web/?scale=0.5     (audio-synced; space, ←/→ bars, H hud, D debug)
+//   capture:      /web/?capture=1     (window.__film API for render/render.mjs)
 import { Film } from './film.js';
-import { W, H, FPS, FRAMES, DURATION, BAR } from './config.js';
+import { loadFonts } from './hud/fonts.js';
+import { loadAudioData, FPS, FRAMES, BAR, W, H } from './time.js';
 
-const params = new URLSearchParams(location.search);
-const CAPTURE = params.has('capture');
+const q = new URLSearchParams(location.search);
+const capture = q.has('capture');
+const scale = Number(q.get('scale') || (capture ? 1 : 0.5));
+const msaa = Number(q.get('msaa') ?? 4);
+const canvas = document.getElementById('c');
 
-async function loadFonts() {
-  const faces = [
-    ['Inter', 'Inter.ttf', { weight: '100 900' }],
-    ['JetBrains Mono', 'JetBrainsMono.ttf', { weight: '100 900' }],
-    ['STIX Two Text', 'STIXTwoText-Italic.ttf', { style: 'italic', weight: '400 700' }],
-    ['STIX Two Text', 'STIXTwoText.ttf', { weight: '400 700' }],
-  ];
-  await Promise.all(faces.map(async ([fam, file, desc]) => {
-    const f = new FontFace(fam, `url(../assets/fonts/${file})`, desc);
-    await f.load();
-    document.fonts.add(f);
-  }));
+async function boot() {
+  await Promise.all([loadFonts(), loadAudioData()]);
+  const w = Math.round(W * scale / 4) * 4, h = Math.round(H * scale / 4) * 4;
+  const film = new Film(canvas, { width: w, height: h, msaa });
+  if (capture) {
+    window.__film = {
+      ready: true, size: [w, h], frames: FRAMES, fps: FPS,
+      renderFrame: (n) => film.renderFrame(n),
+      readYUV: () => film.readYUV(),
+      present: () => film.present(),
+      debug: () => film.stats,
+    };
+    window.__filmObj = film;      // for profiling and tools
+    return;
+  }
+  live(film);
 }
 
-async function main() {
-  await loadFonts();
-  const features = await fetch('../assets/audio/features.json').then((r) => r.json()).catch(() => null);
-  const canvas = document.getElementById('c');
-  canvas.width = W; canvas.height = H;
-  const film = new Film(canvas, features);
-  window.__film = {
-    ready: true, frames: FRAMES, fps: FPS,
-    // capture: render frame n, return a Uint8Array of packed YUV420 (BT.709 limited)
-    renderFrame(n) { film.render(n / FPS, n); return film.stats; },
-    readYUV() { return film.readYUV(); },
-    present() { film.present(); },
-    stats: () => film.stats,
-    size: [W, H],
-    setDebug(d) { film.debug = d; },
-  };
-  if (CAPTURE) return;
-
-  // ---- live player
+function live(film) {
   const audio = new Audio('../assets/audio/soundtrack.wav');
   audio.loop = true;
-  audio.preload = 'auto';
   const ui = document.getElementById('ui');
-  const bar = document.getElementById('scrub');
-  const label = document.getElementById('time');
-  let scrubT = Number(params.get('t') || 0);
-  let playing = false;
-  const fpsEl = document.getElementById('fps');
-  let last = performance.now(), acc = 0, n = 0;
-
-  function frame() {
-    const t = playing ? audio.currentTime : scrubT;
-    film.render(t);
-    film.present();
-    bar.value = String((t / DURATION) * 1000);
-    label.textContent = `${t.toFixed(2)} s · bar ${(t / BAR).toFixed(2)} · blur×${film.stats.samples}`;
-    const now = performance.now(); acc += now - last; last = now; n++;
-    if (acc > 500) { fpsEl.textContent = `${(1000 * n / acc).toFixed(0)} fps`; acc = 0; n = 0; }
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-
-  const toggle = async () => {
-    if (playing) { audio.pause(); scrubT = audio.currentTime; playing = false; }
-    else { audio.currentTime = scrubT; await audio.play(); playing = true; }
-    document.getElementById('play').textContent = playing ? '❚❚' : '▶';
-  };
-  document.getElementById('play').onclick = toggle;
-  canvas.onclick = toggle;
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') { e.preventDefault(); toggle(); }
-    if (e.code === 'ArrowRight') { scrubT = Math.min(DURATION, (playing ? audio.currentTime : scrubT) + BAR); if (playing) audio.currentTime = scrubT; }
-    if (e.code === 'ArrowLeft') { scrubT = Math.max(0, (playing ? audio.currentTime : scrubT) - BAR); if (playing) audio.currentTime = scrubT; }
-    if (e.code === 'KeyH') ui.classList.toggle('hidden');
+  let paused = true, t = Number(q.get('t') || 0) * BAR, debug = false, last = performance.now();
+  const start = document.createElement('div');
+  start.id = 'start'; start.textContent = 'click to play';
+  document.body.appendChild(start);
+  start.onclick = () => { start.remove(); audio.currentTime = t; audio.play(); paused = false; };
+  addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { paused = !paused; if (paused) audio.pause(); else { audio.currentTime = t; audio.play(); } }
+    if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { t = Math.max(0, t + (e.code === 'ArrowRight' ? BAR : -BAR)); audio.currentTime = t; }
+    if (e.code === 'KeyD') debug = !debug;
+    if (e.code === 'KeyH') film.post.mComp.uniforms.uHud.value = 1 - film.post.mComp.uniforms.uHud.value;
   });
-  bar.oninput = () => { scrubT = (Number(bar.value) / 1000) * DURATION; if (playing) audio.currentTime = scrubT; };
+  const loop = (now) => {
+    if (!paused) t = audio.currentTime; else t += 0;
+    last = now;
+    const frame = Math.round(t * FPS) % FRAMES;
+    const st = film.renderFrame(frame);
+    film.present();
+    ui.textContent = debug ? `bar ${st.b.toFixed(2)}  frame ${frame}  blur ${st.samples}  ${st.ms} ms` : '';
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
 }
 
-main().catch((e) => { console.error(e); document.body.insertAdjacentHTML('beforeend', `<pre style="color:#f66">${e.stack}</pre>`); window.__filmError = String(e.stack || e); });
+boot().catch((e) => { window.__filmError = String(e && e.stack || e); console.error(e); });

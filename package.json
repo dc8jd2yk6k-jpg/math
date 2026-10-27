@@ -1,0 +1,15 @@
+{
+  "name": "delta-t-to-zero",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Δt → 0 — a single-take, beat-locked motion film about the acceleration of AI in mathematics.",
+  "type": "module",
+  "scripts": {
+    "serve": "node render/serve.mjs",
+    "render": "node render/render.mjs"
+  },
+  "dependencies": {
+    "three": "0.170.0",
+    "ws": "^8.18.0"
+  }
+}

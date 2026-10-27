@@ -30,7 +30,8 @@ function knightGeometry() {
   const head = new THREE.ExtrudeGeometry(s, { depth: 0.22 * SQ, bevelEnabled: true, bevelThickness: 0.05 * SQ, bevelSize: 0.05 * SQ, bevelSegments: 3, steps: 1, curveSegments: 4 });
   head.translate(0, 0, -0.11 * SQ);
   const base = new THREE.LatheGeometry(P([...BASE, [0.24, 0.28], [0, 0.29]]), 40);
-  const merged = mergeGeoms([base.toNonIndexed(), head.toNonIndexed()]);
+  const flat = (g) => (g.index ? g.toNonIndexed() : g);
+  const merged = mergeGeoms([flat(base), flat(head)]);
   merged.computeVertexNormals();
   return merged;
 }

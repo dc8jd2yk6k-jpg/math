@@ -482,11 +482,6 @@ export class HUD {
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fillText('EXPONENTIAL TIME HYPOTHESIS · 1999', 0, -size * 0.8);
         if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
-        const k3 = clamp((b - 26.5) / 0.2);
-        ctx.globalAlpha = k * k3;
-        ctx.font = FONTS.math(54);
-        ctx.fillStyle = '#fff';
-        ctx.fillText('', 0, 0);
         ctx.restore();
         ctx.textAlign = 'left';
         ctx.globalAlpha = 1;

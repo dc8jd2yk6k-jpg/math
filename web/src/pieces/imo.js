@@ -156,7 +156,6 @@ export class IMO extends Piece {
     const isGold = b >= 14;
     for (const P of this.panels) {
       const appear = ease.outBack(clamp((b - (10.05 + P.k * 0.1)) / 0.15));
-      P.g.matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), new THREE.Vector3());
       const sc = Math.max(0.001, appear);
       [P.outline, P.inner, P.fill, P.label, P.score, P.x].forEach((o) => o.scale.setScalar(sc));
       const solved24 = IMO24[P.k] > 0, solved25 = IMO25[P.k] > 0;

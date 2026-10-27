@@ -96,6 +96,7 @@ export class Film {
       dustGain: (b > 30 && b < 34 ? 0.25 : 1),
       pieceGain: 1,
       gateGain: (1 - smoothstep(26.0, 26.6, b)) * 0.9,
+      yearLabelGain: envelope(b, 30.2, 35.3, 0.6, 0.5) * 0.9,   // floor years only in the reveal (gates carry them before)
       streakGain: 0, streakLen: 0,
     };
     {

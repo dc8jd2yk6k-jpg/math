@@ -227,7 +227,7 @@ export class World {
     this.extrap.material.uniforms.uGain.value = hp.spineGain * 0.8;
     this.stations.material.uniforms.uGain.value = hp.stationGain;
     this.floorGrid.material.uniforms.uGain.value = hp.gridGain;
-    this.yearLabels.children.forEach((m) => { m.material.uniforms.uGain.value = hp.gridGain * 0.7; });
+    this.yearLabels.children.forEach((m) => { m.material.uniforms.uGain.value = hp.yearLabelGain; });
     this.countAxis.material.uniforms.uGain.value = hp.axisGain;
     this.stars.material.uniforms.uGain.value = hp.starGain;
     this.gates.update(ctx.b, ctx.b, hp.gateGain, ctx.pixelScale);

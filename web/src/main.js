@@ -8,11 +8,7 @@ const CAPTURE = params.has('capture');
 
 async function loadFonts() {
   const faces = [
-    ['Titillium Web', 'TitilliumWeb-Black.ttf', { weight: '900' }],
-    ['Titillium Web', 'TitilliumWeb-Bold.ttf', { weight: '700' }],
-    ['Titillium Web', 'TitilliumWeb-SemiBold.ttf', { weight: '600' }],
-    ['Titillium Web', 'TitilliumWeb-Regular.ttf', { weight: '400' }],
-    ['Titillium Web', 'TitilliumWeb-Light.ttf', { weight: '300' }],
+    ['Inter', 'Inter.ttf', { weight: '100 900' }],
     ['JetBrains Mono', 'JetBrainsMono.ttf', { weight: '100 900' }],
     ['STIX Two Text', 'STIXTwoText-Italic.ttf', { style: 'italic', weight: '400 700' }],
     ['STIX Two Text', 'STIXTwoText.ttf', { weight: '400 700' }],
@@ -37,6 +33,7 @@ async function main() {
     readYUV() { return film.readYUV(); },
     present() { film.present(); },
     stats: () => film.stats,
+    size: [W, H],
     setDebug(d) { film.debug = d; },
   };
   if (CAPTURE) return;

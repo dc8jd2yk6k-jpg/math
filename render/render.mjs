@@ -33,8 +33,8 @@ for (let s = 0; s < FRAMES; s += CHUNK) {
 }
 console.log(`render: ${chunks.length} chunk(s) of ${CHUNK} frames, ${WORKERS} workers, crf ${CRF}`);
 
-function encoder(file) {
-  return spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'yuv420p', '-s', '1920x1080', '-r', String(FPS),
+function encoder(file, size) {
+  return spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'yuv420p', '-s', size, '-r', String(FPS),
     '-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-i', '-',
     '-c:v', 'libx264', '-preset', 'slow', '-crf', CRF, '-tune', 'film', '-profile:v', 'high', '-pix_fmt', 'yuv420p',
     '-x264-params', 'keyint=120:min-keyint=1:aq-mode=3', '-colorspace', 'bt709', '-color_primaries', 'bt709',
@@ -47,10 +47,10 @@ const total = chunks.reduce((a, c) => a + (c.e - c.s + 1), 0);
 const { server, port } = await startServer();
 
 async function worker(id) {
-  const { browser, page } = await openFilm(port);
+  const { browser, page, size } = await openFilm(port);
   while (chunks.length) {
     const c = chunks.shift();
-    const enc = encoder(c.file);
+    const enc = encoder(c.file, size);
     const closed = new Promise((r) => enc.on('close', r));
     for (let n = c.s; n <= c.e; n++) {
       const { buf } = await grabFrame(page, n);
@@ -83,7 +83,7 @@ fs.writeFileSync(list, all.map((f) => `file '${path.join(WORK, f)}'`).join('\n')
 const video = path.join(WORK, 'video.mp4');
 spawnSync('ffmpeg', ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', video], { stdio: 'inherit' });
 const audio = path.join(ROOT, 'assets/audio/soundtrack.wav');
-const final = path.join(OUT, 'delta-t-to-zero_1080p60.mp4');
+const final = path.join(OUT, 'delta-t-to-zero_1080x1920_60fps.mp4');
 const r = spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', video, '-i', audio, '-map', '0:v', '-map', '1:a', '-c:v', 'copy',
   '-c:a', 'aac', '-b:a', '320k', '-ar', '48000', '-shortest', '-movflags', '+faststart',
   '-metadata', 'title=Δt → 0', '-metadata', 'comment=One take. Linear time. AI × mathematics, 1950–2026.', final], { stdio: 'inherit' });

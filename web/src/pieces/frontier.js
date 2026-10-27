@@ -1,123 +1,101 @@
-// Phase III set pieces — one per frontier result, each beat-locked.
+// Phase III: one white line-art object per frontier result.
 import * as THREE from 'three';
-import { Piece, frameMatrix } from './common.js';
-import { makeSegments, makePoints, textPlane } from '../gfx/glow.js';
-import { rng, clamp, ease, smoothstep, hexToRgb, lerp } from '../util.js';
-import { frameAt } from '../curve.js';
-import { PALETTE } from '../config.js';
+import { Piece, WHITE, DIM } from './common.js';
+import { makeSegments, makePoints } from '../gfx/glow.js';
+import { frameAt, spineAt } from '../curve.js';
+import { rng, clamp, ease, smoothstep } from '../util.js';
 
-function localGroup(b, anchor) {
+// a group placed in the screen frame of story position u, centred at local (x, y, z)
+function placed(u, x, y, z, yawDeg = 0) {
+  const f = frameAt(u);
   const g = new THREE.Group();
   g.matrixAutoUpdate = false;
-  g.matrix.copy(frameMatrix(b, anchor));
-  return g;
+  const q = new THREE.Quaternion().setFromAxisAngle(f.U, THREE.MathUtils.degToRad(yawDeg));
+  const m = new THREE.Matrix4().makeBasis(f.R.clone().applyQuaternion(q), f.U, f.F.clone().applyQuaternion(q));
+  const o = spineAt(u).addScaledVector(f.R, x).addScaledVector(f.U, y).addScaledVector(f.F, z);
+  g.matrix.copy(m.setPosition(o));
+  return { g, o, f };
 }
 
 // ------------------------------------------------------------------ Erdős
-// The 7-cube projected to the plane with unit edges: every edge has length
-// exactly 1 — a unit-distance graph with many coincidences of distance.
+// The 7-cube projected to the plane: every edge has length exactly 1.
 export class Erdos extends Piece {
-  constructor(A) {
-    super(15.9, 18.3, 0.1, 0.4);
-    this.local = localGroup(16.6, A.erdos);
-    this.root.add(this.local);
-    const k = 7, U = 2.15;
+  constructor() {
+    super(15.9, 18.1, 0.2, 0.3);
+    const { g, o, f } = placed(16.9, 0.4, -4.5, -3);
+    this.local = g; this.root.add(g);
+    this.center = o.clone().addScaledVector(f.U, 1.5);
+    const k = 7, U = 1.75;
     const dirs = [];
-    for (let i = 0; i < k; i++) { const a = (i * Math.PI) / k + 0.1; dirs.push(new THREE.Vector2(Math.cos(a), Math.sin(a))); }
+    for (let i = 0; i < k; i++) { const a = (i * Math.PI) / k + 0.22; dirs.push(new THREE.Vector2(Math.cos(a), Math.sin(a))); }
+    const c0 = new THREE.Vector2();
+    dirs.forEach((d) => c0.addScaledVector(d, 0.5));
     const pts = [];
-    const center = new THREE.Vector2();
-    dirs.forEach((d) => center.addScaledVector(d, 0.5));
     for (let m = 0; m < 1 << k; m++) {
-      const p = new THREE.Vector2();
-      let w = 0;
+      const p = new THREE.Vector2(); let w = 0;
       for (let i = 0; i < k; i++) if (m & (1 << i)) { p.add(dirs[i]); w++; }
-      p.sub(center).multiplyScalar(U);
-      pts.push({ m, w, p });
+      pts.push({ m, w, p: p.sub(c0).multiplyScalar(U) });
     }
-    const cyan = hexToRgb('#7fe8ff');
     const segs = [];
     for (const a of pts) for (let i = 0; i < k; i++) {
       if (a.m & (1 << i)) continue;
-      const bq = pts[a.m | (1 << i)];
-      const born = 16.0 + (a.w + 1) * 0.0625;
-      segs.push({ a: new THREE.Vector3(a.p.x, a.p.y, 0), b: new THREE.Vector3(bq.p.x, bq.p.y, 0), color: cyan.map((c) => c * (0.7 + 0.1 * i)), width: 0.07, born, grow: 0.06, alpha: 0.9 });
+      const q = pts[a.m | (1 << i)];
+      segs.push({ a: new THREE.Vector3(a.p.x, a.p.y, 0), b: new THREE.Vector3(q.p.x, q.p.y, 0), color: WHITE, width: 0.03, alpha: 0.8, born: 16.05 + a.w * 0.0625 + i * 0.01, grow: 0.07 });
     }
-    this.edges = makeSegments(segs, { minPx: 1.3, core: 0.9 });
-    this.nodes = makePoints(pts.map((a) => ({ p: new THREE.Vector3(a.p.x, a.p.y, 0), color: [1.4, 1.6, 1.8], size: 0.32, born: 16.0 + a.w * 0.0625, fadeIn: 0.04 })), { minPx: 2.5, maxPx: 14 });
-    // unit circle around the central vertex, through its neighbours
-    const c0 = pts[0b0010101].p;
+    this.edges = makeSegments(segs, { minPx: 1.3, core: 0.6 });
+    this.nodes = makePoints(pts.map((a) => ({ p: new THREE.Vector3(a.p.x, a.p.y, 0), color: [1.2, 1.2, 1.25], size: 0.12, born: 16.05 + a.w * 0.0625, fadeIn: 0.05 })), { minPx: 2.5, maxPx: 6 });
+    const cc = pts[0b0010101].p;
     const ring = [];
     for (let i = 0; i < 120; i++) {
       const a0 = (i / 120) * Math.PI * 2, a1 = ((i + 1) / 120) * Math.PI * 2;
-      ring.push({ a: new THREE.Vector3(c0.x + Math.cos(a0) * U, c0.y + Math.sin(a0) * U, 0), b: new THREE.Vector3(c0.x + Math.cos(a1) * U, c0.y + Math.sin(a1) * U, 0), color: [1.8, 1.4, 0.6], width: 0.06, born: 16.75 + i / 120 * 0.2, grow: 0.01 });
+      ring.push({ a: new THREE.Vector3(cc.x + Math.cos(a0) * U, cc.y + Math.sin(a0) * U, 0), b: new THREE.Vector3(cc.x + Math.cos(a1) * U, cc.y + Math.sin(a1) * U, 0), color: WHITE, width: 0.03, born: 16.8 + (i / 120) * 0.25, grow: 0.01 });
     }
-    this.ring = makeSegments(ring, { minPx: 1.6, core: 1.2 });
-    this.label = textPlane('|x − y| = 1', 1.1, [1.6, 1.3, 0.6], { font: 'math', px: 110 });
-    this.label.position.set(c0.x, c0.y + U + 1.0, 0);
-    [this.edges, this.nodes, this.ring, this.label].forEach((o) => this.local.add(o));
-    this.center = new THREE.Vector3(c0.x, c0.y, 0).applyMatrix4(this.local.matrix);
+    this.ring = makeSegments(ring, { minPx: 1.5, core: 1 });
+    [this.edges, this.nodes, this.ring].forEach((x) => g.add(x));
+    const cw = new THREE.Vector3(cc.x, cc.y + U, 0).applyMatrix4(g.matrix);
+    this.labels = [{ p: cw, text: '|x − y| = 1', b0: 17.0, b1: 18.0, dx: 30, dy: -40, italic: true, size: 30 }];
   }
   update(b, ctx) {
     if (!super.update(b, ctx)) return;
-    const g = this.g;
-    this.local.matrix.copy(this.baseM || (this.baseM = this.local.matrix.clone()));
-    const spin = new THREE.Matrix4().makeRotationZ((b - 16) * 0.18);
-    this.local.matrix.multiply(spin);
-    this.edges.material.uniforms.uGain.value = g * (1 + 0.3 * ctx.beat);
-    this.nodes.material.uniforms.uGain.value = g;
-    this.ring.material.uniforms.uGain.value = g;
-    this.label.material.uniforms.uGain.value = g * smoothstep(16.8, 17.0, b);
+    for (const o of [this.edges, this.nodes, this.ring]) o.material.uniforms.uGain.value = this.g;
   }
 }
 
 // ------------------------------------------------------------------ Jacobian
-// A polynomial warp of 3-space with constant Jacobian determinant... that
-// still sends three distinct points to one.
+// A polynomial warp with constant Jacobian determinant that still sends three
+// distinct points to one (the warp itself is illustrative).
 export class Jacobian extends Piece {
-  constructor(A) {
-    super(17.9, 20.3, 0.1, 0.4);
-    this.local = localGroup(18.6, A.jacobian);
-    this.root.add(this.local);
-    const n = 6, sp = 1.55, sub = 14;
-    this.lines = [];
-    const half = (n - 1) / 2;
-    for (let ax = 0; ax < 3; ax++) for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-      const pts = [];
-      for (let s = 0; s <= sub; s++) {
-        const u = (s / sub) * (n - 1) - half;
-        const c = [0, 0, 0];
-        c[ax] = u * sp; c[(ax + 1) % 3] = (i - half) * sp; c[(ax + 2) % 3] = (j - half) * sp;
-        pts.push(new THREE.Vector3(...c));
-      }
-      this.lines.push(pts);
-    }
+  constructor() {
+    super(17.9, 20.1, 0.2, 0.3);
+    const { g, o, f } = placed(18.9, 0, -4.8, -3, 28);
+    this.local = g; this.root.add(g);
+    this.center = o.clone().addScaledVector(f.U, 1.5);
+    const n = 6, sp = 1.4, sub = 12, half = (n - 1) / 2;
     const segs = [];
-    const orange = hexToRgb(PALETTE.gold);
-    this.lines.forEach((L, li) => {
-      for (let s = 0; s < L.length - 1; s++) segs.push({ a: L[s], b: L[s + 1], color: [0.95, 0.55, 0.3], width: 0.05, alpha: 0.75, born: 18.0 + (li % 12) * 0.02, grow: 0.12 });
-    });
-    this.grid = makeSegments(segs, { minPx: 1.1, core: 0.6 });
-    this.local.add(this.grid);
+    for (let ax = 0; ax < 3; ax++) for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      for (let s = 0; s < sub; s++) {
+        const pt = (t) => { const c = [0, 0, 0]; c[ax] = (t / sub * (n - 1) - half) * sp; c[(ax + 1) % 3] = (i - half) * sp; c[(ax + 2) % 3] = (j - half) * sp; return new THREE.Vector3(...c); };
+        segs.push({ a: pt(s), b: pt(s + 1), color: WHITE, width: 0.025, alpha: 0.45, born: 18.0 + ((i + j) % 6) * 0.03, grow: 0.12 });
+      }
+    }
+    this.grid = makeSegments(segs, { minPx: 1.0, core: 0.4 });
+    g.add(this.grid);
     this.p0 = this.grid.geometry.attributes.p0.array.slice();
     this.p1 = this.grid.geometry.attributes.p1.array.slice();
-    // three colliding points
-    this.starts = [new THREE.Vector3(-3.4, 2.6, -2.2), new THREE.Vector3(3.2, -2.4, 2.6), new THREE.Vector3(-2.2, -3.0, 3.0)];
-    this.target = new THREE.Vector3(0.6, 0.8, -0.4);
-    this.dots = makePoints(this.starts.map((p, i) => ({ p, color: [[2, 0.7, 0.35], [0.4, 1.4, 2], [1.8, 0.5, 1.8]][i], size: 0.7, born: 18.2, fadeIn: 0.1 })), { minPx: 4, maxPx: 30 });
-    this.flash = makePoints([{ p: this.target, color: [3, 2.8, 2.6], size: 3.5 }], { minPx: 4, maxPx: 300 });
-    this.local.add(this.dots); this.local.add(this.flash);
-    this.dotTrails = makeSegments(Array.from({ length: 3 * 24 }, () => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), color: [1.2, 1, 1], width: 0.08 })), { minPx: 1.5, core: 1 });
-    this.local.add(this.dotTrails);
-    this.targetWorld = this.target.clone().applyMatrix4(this.local.matrix);
+    this.starts = [new THREE.Vector3(-3.0, 2.4, -2.0), new THREE.Vector3(3.0, -2.0, 2.2), new THREE.Vector3(-2.0, -2.8, 2.6)];
+    this.target = new THREE.Vector3(0.5, 0.6, -0.3);
+    this.dots = makePoints(this.starts.map((p) => ({ p, color: [1.5, 1.5, 1.55], size: 0.35, born: 18.2, fadeIn: 0.1 })), { minPx: 5, maxPx: 14 });
+    g.add(this.dots);
+    this.g0 = g;
+    this.labels = ['a', 'b', 'c'].map((t, i) => ({ p: this.starts[i].clone().applyMatrix4(g.matrix), text: t, b0: 18.3, b1: 18.9, dx: 18, dy: -14, italic: true, size: 30 }));
+    this.labels.push({ p: this.target.clone().applyMatrix4(g.matrix), text: 'F(a) = F(b) = F(c)', b0: 19.05, b1: 20.0, dx: 40, dy: -50, italic: true, size: 30 });
   }
   warp(p, s, out) {
-    // F_s(x, y, z): a smooth polynomial shear (illustrative)
     const x = p.x, y = p.y, z = p.z;
-    return out.set(x + s * 0.11 * (y * y - 2), y + s * 0.09 * (z * z - x * 0.5 * z), z + s * 0.07 * x * y);
+    return out.set(x + s * 0.1 * (y * y - 2), y + s * 0.08 * (z * z - x * 0.5 * z), z + s * 0.06 * x * y);
   }
   update(b, ctx) {
     if (!super.update(b, ctx)) return;
-    const g = this.g;
     const s = ease.inOutCubic(clamp((b - 18.15) / 0.8));
     const a0 = this.grid.geometry.attributes.p0, a1 = this.grid.geometry.attributes.p1;
     const v = new THREE.Vector3(), o = new THREE.Vector3();
@@ -126,44 +104,28 @@ export class Jacobian extends Piece {
       v.fromArray(this.p1, i * 3); this.warp(v, s, o); a1.setXYZ(i, o.x, o.y, o.z);
     }
     a0.needsUpdate = true; a1.needsUpdate = true;
-    this.grid.material.uniforms.uGain.value = g * (0.9 + 0.3 * ctx.beat);
-    // collision at b = 19 (downbeat of the 2nd bar)
     const m = ease.inOutQuart(clamp((b - 18.35) / 0.65));
     const pos = this.dots.geometry.attributes.position;
-    const ta = this.dotTrails.geometry.attributes;
     this.starts.forEach((p, i) => {
-      const at = (mm) => {
-        const q = p.clone().lerp(this.target, mm);
-        q.addScaledVector(new THREE.Vector3(Math.sin(i * 2.1), Math.cos(i * 1.3), Math.sin(i + 1)), Math.sin(mm * Math.PI) * 1.8);
-        return q;
-      };
-      const q = at(m);
+      const q = p.clone().lerp(this.target, m).addScaledVector(new THREE.Vector3(Math.sin(i * 2.1), Math.cos(i * 1.3), Math.sin(i + 1)), Math.sin(m * Math.PI) * 1.4);
       pos.setXYZ(i, q.x, q.y, q.z);
-      for (let k = 0; k < 24; k++) {
-        const m0 = Math.max(0, m - (k + 1) * 0.02), m1 = Math.max(0, m - k * 0.02);
-        const qa = at(m0), qb = at(m1);
-        ta.p0.setXYZ(i * 24 + k, qa.x, qa.y, qa.z); ta.p1.setXYZ(i * 24 + k, qb.x, qb.y, qb.z);
-        ta.wa.setXY(i * 24 + k, 0.08, (1 - k / 24) * 0.8);
-      }
     });
-    pos.needsUpdate = true; ta.p0.needsUpdate = true; ta.p1.needsUpdate = true; ta.wa.needsUpdate = true;
-    this.dots.material.uniforms.uGain.value = g * smoothstep(18.15, 18.3, b);
-    this.dotTrails.material.uniforms.uGain.value = g * smoothstep(18.35, 18.5, b) * (1 - smoothstep(19.0, 19.3, b));
-    const f = b >= 19 ? Math.exp(-(b - 19) * 5) : 0;
-    this.flash.material.uniforms.uGain.value = g * f * 2;
-    this.flash.material.uniforms.uSize.value = 0.5 + f;
+    pos.needsUpdate = true;
+    this.grid.material.uniforms.uGain.value = this.g;
+    this.dots.material.uniforms.uGain.value = this.g * (1 + (b >= 19 ? 1.5 * Math.exp(-(b - 19) * 6) : 0));
   }
 }
 
 // ------------------------------------------------------------------ Percolation
-// Bond percolation on Z^3 at the critical point p_c ≈ 0.2488. Clusters are
-// coloured by size: big, tenuous, and — as the theorem says — finite.
+// Bond percolation on Z^3 at p_c ≈ 0.2488; the largest cluster is lit.
 export class Percolation extends Piece {
-  constructor(A) {
-    super(19.9, 22.3, 0.1, 0.4);
-    this.local = localGroup(20.55, A.percolation);
-    this.root.add(this.local);
-    const L = 11, sp = 1.45, p = 0.2488;
+  constructor() {
+    super(19.9, 22.1, 0.2, 0.3);
+    const { g, o, f } = placed(20.9, 0, -4.6, -4, 20);
+    this.local = g; this.root.add(g);
+    this.center = o.clone().addScaledVector(f.U, 1.5);
+    this.spin = g.matrix.clone();
+    const L = 10, sp = 1.1, p = 0.2488;
     const r = rng(2026);
     const id = (x, y, z) => (x * L + y) * L + z;
     const parent = new Int32Array(L * L * L).map((_, i) => i);
@@ -171,218 +133,180 @@ export class Percolation extends Piece {
     const bonds = [];
     for (let x = 0; x < L; x++) for (let y = 0; y < L; y++) for (let z = 0; z < L; z++) {
       for (const [dx, dy, dz] of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) {
-        const X = x + dx, Y = y + dy, Z = z + dz;
-        if (X >= L || Y >= L || Z >= L) continue;
-        if (r() < p) {
-          bonds.push([id(x, y, z), id(X, Y, Z), [x, y, z], [X, Y, Z]]);
-          const ra = find(id(x, y, z)), rb = find(id(X, Y, Z));
-          if (ra !== rb) parent[ra] = rb;
-        }
+        const X = x + dx, Y = y + dy, Zc = z + dz;
+        if (X >= L || Y >= L || Zc >= L || r() >= p) continue;
+        bonds.push([id(x, y, z), [x, y, z], [X, Y, Zc]]);
+        const ra = find(id(x, y, z)), rb = find(id(X, Y, Zc));
+        if (ra !== rb) parent[ra] = rb;
       }
     }
     const size = new Map();
     for (const bd of bonds) { const c = find(bd[0]); size.set(c, (size.get(c) || 0) + 1); }
-    const ranked = [...size.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]);
-    const palette = [[2.0, 0.55, 0.3], [1.9, 1.1, 0.25], [1.7, 0.35, 1.2], [0.4, 1.3, 1.8], [0.5, 1.6, 0.8]];
+    const big = [...size.entries()].sort((a, c) => c[1] - a[1])[0][0];
     const h = (L - 1) / 2;
     const P = (c) => new THREE.Vector3((c[0] - h) * sp, (c[1] - h) * sp, (c[2] - h) * sp);
-    const plain = [], colored = [];
-    for (const bd of bonds) {
-      const c = find(bd[0]);
-      const rank = ranked.indexOf(c);
-      const born = 20.0 + r() * 0.5;
-      plain.push({ a: P(bd[2]), b: P(bd[3]), color: [0.6, 0.75, 1.0], width: 0.07, alpha: 0.7, born, grow: 0.05, die: 20.85, fade: 0.2 });
-      const col = rank < palette.length ? palette[rank] : [0.25, 0.32, 0.5];
-      colored.push({ a: P(bd[2]), b: P(bd[3]), color: col, width: rank < 5 ? 0.11 : 0.05, alpha: rank < 5 ? 1 : 0.5, born: 20.7 + (rank < 5 ? rank * 0.03 : 0.2), grow: 0.08 });
-    }
-    // faint lattice sites
-    const sites = [];
-    for (let x = 0; x < L; x += 1) for (let y = 0; y < L; y += 1) for (let z = 0; z < L; z += 1) sites.push({ p: P([x, y, z]), color: [0.25, 0.32, 0.45], size: 0.08, born: 19.95 + (x + y + z) * 0.004, fadeIn: 0.05 });
-    this.plain = makeSegments(plain, { minPx: 1.1, core: 0.6 });
-    this.colored = makeSegments(colored, { minPx: 1.2, core: 0.9 });
-    this.sites = makePoints(sites, { minPx: 1.2, maxPx: 4 });
-    [this.sites, this.plain, this.colored].forEach((o) => this.local.add(o));
-    this.stats = { bonds: bonds.length, largest: size.get(ranked[0]) };
-    this.cornerWorld = P([L - 1, L - 1, 0]).applyMatrix4(this.local.matrix);
+    const segs = bonds.map((bd) => {
+      const lit = find(bd[0]) === big;
+      return { a: P(bd[1]), b: P(bd[2]), color: lit ? [1.4, 1.4, 1.45] : DIM, width: lit ? 0.06 : 0.03, alpha: lit ? 1 : 0.55, born: lit ? 20.55 + r() * 0.3 : 20.0 + r() * 0.45, grow: 0.06 };
+    });
+    this.bonds = makeSegments(segs, { minPx: 1.1, core: 0.6 });
+    g.add(this.bonds);
+    this.labels = [{ p: P([L - 1, L - 1, 0]).applyMatrix4(g.matrix), text: 'p = p꜀', b0: 20.6, b1: 21.9, dx: 30, dy: -30, italic: true, size: 30 }];
   }
   update(b, ctx) {
     if (!super.update(b, ctx)) return;
-    const g = this.g;
-    this.plain.material.uniforms.uGain.value = g;
-    this.colored.material.uniforms.uGain.value = g * (1 + 0.35 * ctx.beat);
-    this.sites.material.uniforms.uGain.value = g * 0.8;
+    this.local.matrix.copy(this.spin).multiply(new THREE.Matrix4().makeRotationY((b - 20) * 0.25));
+    this.bonds.material.uniforms.uGain.value = this.g;
   }
 }
 
 // ------------------------------------------------------------------ Navier–Stokes
-// A vortex that spirals inward and stretches like spaghetti until the
-// velocity blows up in finite time (t → T*).
+// The equation types in; a vortex spirals inward and stretches like spaghetti
+// until it blows up in finite time.
 export class Navier extends Piece {
-  constructor(A) {
-    super(21.9, 23.25, 0.08, 0.3);
-    this.local = localGroup(22.45, A.navier);
-    this.root.add(this.local);
+  constructor() {
+    super(21.9, 23.05, 0.12, 0.2);
+    const { g, o, f } = placed(22.6, 0, -3.2, -3, 0);
+    this.local = g; this.root.add(g);
+    this.center = o.clone().addScaledVector(f.U, 2.0);
     const r = rng(9);
     const pts = [];
-    for (let i = 0; i < 4200; i++) {
+    for (let i = 0; i < 3600; i++) {
       const th = r() * Math.PI * 2, u = r() * 2 - 1, rho = 0.25 + Math.pow(r(), 0.7) * 0.9;
-      const hot = Math.exp(-rho * 2.5);
-      pts.push({ p: new THREE.Vector3(0, 0, 0), color: [0.5 + 1.5 * hot, 0.75 + 1.0 * hot, 1.6], size: 0.07 + r() * 0.06, born: 21.95 + r() * 0.08, fadeIn: 0.1, motion: [th, u, rho, r()] });
+      const w = 0.6 + 0.6 * Math.exp(-rho * 2);
+      pts.push({ p: new THREE.Vector3(), color: [w, w, w * 1.05], size: 0.05 + r() * 0.04, born: 22.1 + r() * 0.1, fadeIn: 0.12, motion: [th, u, rho, r()] });
     }
     this.vortex = makePoints(pts, {
-      minPx: 1.3, maxPx: 7,
+      minPx: 1.2, maxPx: 5,
       uniforms: { uS: { value: 0 } },
       displace: {
         header: 'uniform float uS;',
         body: `
           float s = uS;
-          float R = 3.4 * sqrt(max(1.0 - 0.985 * s, 0.0004));
-          float Lh = 4.2 / pow(max(1.0 - 0.92 * s, 0.02), 0.55);
-          float th = motion.x + uTime * (5.0 / (motion.z * R + 0.25)) + motion.y * 3.0 * (0.5 + s);
-          float rr = motion.z * R * (1.0 + 0.25 * sin(motion.y * 9.0 + uTime * 6.0));
-          P = vec3(cos(th) * rr, motion.y * Lh, sin(th) * rr);
-          alpha = smoothstep(1.0, 0.7, abs(motion.y)) * (0.6 + 0.4 * motion.w);
-        `,
+          float R = 2.4 * sqrt(max(1.0 - 0.985 * s, 0.0004));
+          float Lh = 2.0 / pow(max(1.0 - 0.9 * s, 0.1), 0.5);
+          float th = motion.x + uTime * (4.0 / (motion.z * R + 0.25)) + motion.y * 2.5 * (0.5 + s);
+          float rr = motion.z * R;
+          P = vec3(cos(th) * rr, motion.y * Lh, sin(th) * rr);   // vortex axis along screen-up
+          alpha = smoothstep(1.0, 0.75, abs(motion.y)) * (0.55 + 0.45 * motion.w);`,
       },
     });
-    this.core = makePoints([{ p: new THREE.Vector3(), color: [3, 2.6, 2.2], size: 3 }], { minPx: 4, maxPx: 420 });
-    this.local.add(this.vortex); this.local.add(this.core);
-    this.coreWorld = new THREE.Vector3().applyMatrix4(this.local.matrix);
+    this.core = makePoints([{ p: new THREE.Vector3(), color: [2.4, 2.4, 2.5], size: 1.4 }], { minPx: 3, maxPx: 160 });
+    g.add(this.vortex, this.core);
+    this.labels = [
+      { p: o.clone().addScaledVector(f.U, -7.4), text: '∂ₜu + (u·∇)u = −∇p + νΔu', b0: 21.95, b1: 23.0, dx: 0, dy: 0, italic: true, size: 34, center: true, type: 1.6 },
+      { p: o.clone().addScaledVector(f.U, -8.8), text: 'Lean · no goals ■', b0: 22.9, b1: 23.05, dx: 0, dy: 0, size: 24, center: true, mono: true },
+    ];
   }
   update(b, ctx) {
     if (!super.update(b, ctx)) return;
-    const g = this.g;
-    const s = clamp((b - 22.0) / 0.88);
+    const s = clamp((b - 22.1) / 0.78);
     this.vortex.material.uniforms.uS.value = ease.inQuad(s);
-    this.vortex.material.uniforms.uGain.value = g * (1 + 0.6 * s);
-    const blow = b >= 22.88 ? Math.exp(-(b - 22.88) * 6) : 0;
-    this.core.material.uniforms.uGain.value = g * (0.3 * s * s + blow * 3);
-    this.core.material.uniforms.uSize.value = 0.4 + blow * 2.5;
+    this.vortex.material.uniforms.uGain.value = this.g * (1 - smoothstep(22.88, 22.98, b) * 0.85);
+    const blow = b >= 22.88 ? Math.exp(-(b - 22.88) * 7) : 0;
+    this.core.material.uniforms.uGain.value = this.g * (0.25 * s * s + blow * 2.5);
+    this.core.material.uniforms.uSize.value = 0.3 + blow * 1.8;
   }
 }
 
 // ------------------------------------------------------------------ 722 manuscripts
+// 722 pages fly in and settle into a 38 × 19 wall.
 export class Papers extends Piece {
-  constructor(A) {
-    super(22.95, 24.3, 0.05, 0.4);
-    const f = frameAt(23.2);
+  constructor() {
+    super(22.95, 24.05, 0.06, 0.25);
+    const { g, o, f } = placed(23.45, 0, -3.8, -4, 0);
+    this.local = g; this.root.add(g);
+    this.center = o.clone().addScaledVector(f.U, 1.5);
+    const cols = 38, rows = 19, cw = 0.17, ch = 0.23, gap = 0.05;
+    const n = cols * rows;
     const r = rng(722);
-    const n = 722;
     const geo = new THREE.InstancedBufferGeometry();
-    const base = new THREE.PlaneGeometry(0.6, 0.78);
+    const base = new THREE.PlaneGeometry(cw, ch);
     geo.index = base.index;
     geo.setAttribute('position', base.attributes.position);
     geo.setAttribute('uv', base.attributes.uv);
-    const dir = new Float32Array(n * 3), axis = new Float32Array(n * 3), prm = new Float32Array(n * 4);
+    const from = new Float32Array(n * 3), to = new Float32Array(n * 3), prm = new Float32Array(n * 2);
     for (let i = 0; i < n; i++) {
-      // directions biased outward from the climb axis
-      const a = r() * Math.PI * 2, el = (r() - 0.5) * 1.3;
-      const d = f.N.clone().multiplyScalar(Math.cos(a)).addScaledVector(f.Z, Math.sin(a)).addScaledVector(f.T, el).normalize();
-      dir.set([d.x, d.y, d.z], i * 3);
-      const ax = new THREE.Vector3(r() - 0.5, r() - 0.5, r() - 0.5).normalize();
-      axis.set([ax.x, ax.y, ax.z], i * 3);
-      prm.set([23.0 + (i / n) * 0.18, 3 + Math.pow(r(), 0.8) * 16, (r() - 0.5) * 12, r()], i * 4);
+      const cx = i % cols, cy = Math.floor(i / cols);
+      to.set([(cx - (cols - 1) / 2) * (cw + gap), (cy - (rows - 1) / 2) * (ch + gap), 0], i * 3);
+      const a = r() * Math.PI * 2, d = 6 + r() * 9;
+      from.set([Math.cos(a) * d, Math.sin(a) * d, 6 + r() * 14], i * 3);
+      prm.set([23.0 + r() * 0.4, r()], i * 2);
     }
-    geo.setAttribute('dir', new THREE.InstancedBufferAttribute(dir, 3));
-    geo.setAttribute('axis', new THREE.InstancedBufferAttribute(axis, 3));
-    geo.setAttribute('prm', new THREE.InstancedBufferAttribute(prm, 4));
+    geo.setAttribute('from', new THREE.InstancedBufferAttribute(from, 3));
+    geo.setAttribute('to', new THREE.InstancedBufferAttribute(to, 3));
+    geo.setAttribute('prm', new THREE.InstancedBufferAttribute(prm, 2));
     geo.instanceCount = n;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uGain: { value: 0 }, uOrigin: { value: A.papers.clone() }, uPixel: { value: 1 }, uCam: { value: new THREE.Vector3() } },
+      uniforms: { uTime: { value: 0 }, uGain: { value: 0 }, uPixel: { value: 1 } },
       vertexShader: /* glsl */`
-        attribute vec3 dir; attribute vec3 axis; attribute vec4 prm;
-        uniform float uTime; uniform vec3 uOrigin;
-        varying vec2 vUv; varying float vA; varying float vSeed;
-        uniform vec3 uCam;
-        vec3 rot(vec3 v, vec3 k, float a) { return v * cos(a) + cross(k, v) * sin(a) + k * dot(k, v) * (1.0 - cos(a)); }
+        attribute vec3 from; attribute vec3 to; attribute vec2 prm;
+        uniform float uTime;
+        varying vec2 vUv; varying float vSeed; varying float vA;
         void main() {
-          float t = uTime - prm.x;
-          vA = step(0.0, t);
-          float d = prm.y * (1.0 - exp(-max(t, 0.0) * 2.2)) + max(t, 0.0) * 1.5;
-          vec3 p = rot(position, axis, prm.z * max(t, 0.0) + prm.w * 6.28);
-          vec3 P = uOrigin + dir * d + p;
-          vUv = uv; vSeed = prm.w;
-          float dc = length(P - uCam);
-          vA *= smoothstep(1.2, 5.0, dc) * smoothstep(60.0, 25.0, dc);
-          gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
+          float t = clamp((uTime - prm.x) / 0.22, 0.0, 1.0);
+          float e = 1.0 - pow(1.0 - t, 3.0);
+          vec3 P = mix(from, to, e) + position * (0.6 + 0.4 * e);
+          vUv = uv; vSeed = prm.y; vA = smoothstep(0.0, 0.15, t);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(P, 1.0);
         }`,
       fragmentShader: /* glsl */`
-        uniform float uGain; varying vec2 vUv; varying float vA; varying float vSeed;
+        uniform float uGain; varying vec2 vUv; varying float vSeed; varying float vA;
         float h(float n) { return fract(sin(n) * 43758.5453); }
         void main() {
-          vec2 uv = vUv;
-          float border = 1.0 - smoothstep(0.0, 0.03, min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y)));
-          float title = step(0.84, uv.y) * step(uv.y, 0.9) * step(0.15, uv.x) * step(uv.x, 0.85);
-          float row = floor(uv.y * 22.0);
-          float len = 0.55 + 0.35 * h(row + vSeed * 91.0);
-          float lines = step(uv.y, 0.78) * step(0.08, uv.y) * step(0.1, uv.x) * step(uv.x, 0.1 + len * 0.8) * step(0.35, fract(uv.y * 22.0));
-          float eq = step(0.38, uv.y) * step(uv.y, 0.46) * step(0.3, uv.x) * step(uv.x, 0.7) * step(0.5, h(vSeed * 13.0));
-          float v = 0.16 + border * 0.9 + title * 0.9 + lines * 0.45 + eq * 0.6;
-          gl_FragColor = vec4(vec3(0.95, 0.97, 1.0) * v * uGain * vA, 1.0);
+          float border = 1.0 - smoothstep(0.0, 0.06, min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y)));
+          float row = floor(vUv.y * 9.0);
+          float lines = step(vUv.y, 0.82) * step(0.12, vUv.y) * step(0.16, vUv.x) * step(vUv.x, 0.2 + 0.6 * h(row + vSeed * 31.0)) * step(0.45, fract(vUv.y * 9.0));
+          float v = 0.07 + border * 0.55 + lines * 0.3;
+          gl_FragColor = vec4(vec3(0.92, 0.93, 0.96) * v * uGain * vA, 1.0);
         }`,
       transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.frustumCulled = false;
-    this.root.add(this.mesh);
+    g.add(this.mesh);
+    this.labels = [{ p: o.clone().addScaledVector(f.U, -(rows * (ch + gap)) / 2 - 1.2), text: '722', b0: 23.45, b1: 24.0, dx: 0, dy: 0, size: 34, center: true, mono: true }];
   }
   update(b, ctx) {
     if (!super.update(b, ctx)) return;
-    this.mesh.material.uniforms.uGain.value = this.g * 0.13;
-    this.mesh.material.uniforms.uCam.value.copy(ctx.camera.position);
+    this.mesh.material.uniforms.uGain.value = this.g;
   }
 }
 
 // ------------------------------------------------------------------ Yang–Mills
-// A 4D hypercubic gauge lattice, rotating through the fourth dimension;
-// links coloured by direction, plaquettes flashing with flux.
+// A 4D hypercubic lattice rotating through the fourth dimension.
 export class YangMills extends Piece {
-  constructor(A) {
-    super(23.9, 25.3, 0.08, 0.35);
-    this.local = localGroup(24.4, A.yangmills);
-    this.root.add(this.local);
+  constructor() {
+    super(23.95, 25.1, 0.12, 0.25);
+    const { g, o, f } = placed(24.45, 0, -3.8, -3, 0);
+    this.local = g; this.root.add(g);
+    this.center = o.clone().addScaledVector(f.U, 1.5);
     const L = 3;
     this.verts = [];
     for (let x = 0; x < L; x++) for (let y = 0; y < L; y++) for (let z = 0; z < L; z++) for (let w = 0; w < L; w++) this.verts.push([x - 1, y - 1, z - 1, w - 1]);
     const idx = (x, y, z, w) => (((x * L + y) * L + z) * L + w);
     this.edges = [];
-    const cols = [[2.0, 0.35, 0.4], [0.4, 1.8, 0.5], [0.45, 0.6, 2.2], [1.6, 1.4, 1.0]];
     for (let x = 0; x < L; x++) for (let y = 0; y < L; y++) for (let z = 0; z < L; z++) for (let w = 0; w < L; w++) {
       const c = [x, y, z, w];
-      for (let d = 0; d < 4; d++) {
-        const n = c.slice(); n[d]++;
-        if (n[d] >= L) continue;
-        this.edges.push([idx(...c), idx(...n), d]);
-      }
+      for (let d = 0; d < 4; d++) { const nb = c.slice(); nb[d]++; if (nb[d] < L) this.edges.push([idx(...c), idx(...nb), d]); }
     }
     const r = rng(4);
-    this.seg = makeSegments(this.edges.map((e) => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), color: cols[e[2]], width: 0.06, alpha: 0.85, born: 24.0 + r() * 0.15, grow: 0.08 })), { minPx: 1.3, core: 0.9 });
-    this.local.add(this.seg);
-    this.nodes = makePoints(this.verts.map(() => ({ p: new THREE.Vector3(), color: [1.2, 1.2, 1.4], size: 0.16, born: 24.0, fadeIn: 0.1 })), { minPx: 1.5, maxPx: 8 });
-    this.local.add(this.nodes);
-    this.label = textPlane('d = 4', 0.9, [1.4, 1.4, 1.6], { font: 'math', px: 110 });
-    this.label.position.set(0, 5.2, 0);
-    this.local.add(this.label);
+    this.seg = makeSegments(this.edges.map((e) => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), color: e[2] === 3 ? WHITE : DIM.map((v) => v * 1.6), width: 0.035, alpha: 0.9, born: 24.0 + r() * 0.15, grow: 0.08 })), { minPx: 1.3, core: 0.7 });
+    g.add(this.seg);
+    this.labels = [{ p: o.clone().addScaledVector(f.U, 4.6).addScaledVector(f.R, 3.4), text: 'd = 4', b0: 24.2, b1: 25.0, dx: 0, dy: 0, italic: true, size: 30 }];
   }
   update(b, ctx) {
     if (!super.update(b, ctx)) return;
-    const g = this.g;
-    const a = (b - 24) * 1.4, c = (b - 24) * 0.7;
-    const S = 2.6, D = 3.2;
+    const a = (b - 24) * 1.4, c = (b - 24) * 0.6, S = 2.2, D = 3.2;
     const proj = this.verts.map(([x, y, z, w]) => {
       const x1 = x * Math.cos(a) - w * Math.sin(a), w1 = x * Math.sin(a) + w * Math.cos(a);
       const y1 = y * Math.cos(c) - z * Math.sin(c), z1 = y * Math.sin(c) + z * Math.cos(c);
       const k = D / (D - w1 * 0.8);
-      return new THREE.Vector3(x1 * k * S, y1 * k * S, z1 * k * S);
+      return [x1 * k * S, y1 * k * S, z1 * k * S];
     });
     const at = this.seg.geometry.attributes;
-    this.edges.forEach((e, i) => { const p = proj[e[0]], q = proj[e[1]]; at.p0.setXYZ(i, p.x, p.y, p.z); at.p1.setXYZ(i, q.x, q.y, q.z); });
+    this.edges.forEach((e, i) => { at.p0.setXYZ(i, ...proj[e[0]]); at.p1.setXYZ(i, ...proj[e[1]]); });
     at.p0.needsUpdate = true; at.p1.needsUpdate = true;
-    const np = this.nodes.geometry.attributes.position;
-    proj.forEach((p, i) => np.setXYZ(i, p.x, p.y, p.z));
-    np.needsUpdate = true;
-    this.seg.material.uniforms.uGain.value = g * (1 + 0.4 * ctx.beat);
-    this.nodes.material.uniforms.uGain.value = g;
-    this.label.material.uniforms.uGain.value = g * smoothstep(24.2, 24.4, b);
+    this.seg.material.uniforms.uGain.value = this.g;
   }
 }

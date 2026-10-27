@@ -13,133 +13,59 @@ export function daysBetween(a, b) {
   return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
 }
 
-// bar: output bar at which the milestone "hits" (beat-locked reveal)
-// n:   cumulative index -> y coordinate of the spine (honest: the curve is
-//      literally "landmark results vs. linear calendar time")
+// bar:  output bar at which the milestone "hits" (beat-locked reveal)
+// n:    cumulative index -> y coordinate of the line (honest: the curve is
+//       literally "landmark results vs. linear calendar time")
+// head: the three-line header — date shown, title, one-line caption
 export const MILESTONES = [
   {
-    id: 'shannon', bar: 0.0, n: 0, date: [1950, 3, 1], team: 'SHANNON', short: 'SHANNON',
-    era: 0,
-    card: {
-      kicker: '1950 · CLAUDE SHANNON', title: 'PROGRAMMING A COMPUTER FOR PLAYING CHESS',
-      sub: 'The game tree is too large to search: about 10^{120} possible games.',
-      chips: ['10^{120} GAMES'],
-    },
-    prelude: true,
+    id: 'shannon', bar: 1, n: 0, date: [1950, 3, 1], team: 'SHANNON', short: 'Shannon',
+    head: { date: '1950', title: 'Claude Shannon', caption: 'Chess has about 10^{120} possible games. Far too many to search.' },
   },
   {
-    id: 'deepblue', bar: 2, n: 1, date: [1997, 5, 11], team: 'IBM', short: 'DEEP BLUE',
-    era: 1,
-    card: {
-      title: 'DEEP BLUE DEFEATS KASPAROV',
-      sub: 'Brute-force search and hand-tuned evaluation. Game 6, final position.',
-      chips: ['200,000,000 POSITIONS / S', 'MATCH 3½ – 2½'],
-    },
+    id: 'deepblue', bar: 2, n: 1, date: [1997, 5, 11], team: 'IBM', short: 'Deep Blue',
+    head: { date: '1997', title: 'Deep Blue', caption: 'A computer beats the world chess champion, by brute-force search.' },
   },
   {
-    id: 'alphago', bar: 6, n: 2, date: [2016, 3, 15], team: 'GDM', short: 'ALPHAGO',
-    era: 1,
-    card: {
-      title: 'ALPHAGO DEFEATS LEE SEDOL 4 – 1',
-      sub: 'Deep neural networks and reinforcement learning, guiding tree search.',
-      chips: ['~10^{170} LEGAL POSITIONS', 'GAME 2 · MOVE 37'],
-    },
+    id: 'alphago', bar: 6, n: 2, date: [2016, 3, 15], team: 'GDM', short: 'AlphaGo',
+    head: { date: '2016', title: 'AlphaGo', caption: 'Beats Lee Sedol 4–1. Move 37 stuns the Go world.' },
   },
   {
-    id: 'imo24', bar: 10, n: 3, date: [2024, 7, 25], team: 'GDM', short: 'ALPHAPROOF',
-    era: 2,
-    card: {
-      title: 'IMO · SILVER-MEDAL STANDARD',
-      sub: 'AlphaProof + AlphaGeometry 2 solve 4 of 6 problems.',
-      chips: ['28 / 42', '1 POINT BELOW GOLD'],
-      constraints: ['PROBLEMS HAND-TRANSLATED INTO LEAN', 'UP TO 3 DAYS OF COMPUTE PER PROBLEM'],
-    },
+    id: 'imo24', bar: 10, n: 3, date: [2024, 7, 25], team: 'GDM', short: 'IMO Silver',
+    head: { date: '2024.07', title: 'IMO · Silver', caption: '4 of 6 solved, hand-translated into Lean, up to 3 days each.' },
   },
   {
-    id: 'imo25', bar: 14, n: 4, date: [2025, 7, 21], team: 'GDM', short: 'GEMINI DEEP THINK',
-    era: 2,
-    card: {
-      title: 'IMO · GOLD-MEDAL STANDARD',
-      sub: 'Gemini Deep Think: end-to-end in natural language, officially graded.',
-      chips: ['35 / 42', '5 OF 6 SOLVED', 'WITHIN 4.5 HOURS'],
-    },
+    id: 'imo25', bar: 14, n: 4, date: [2025, 7, 21], team: 'GDM', short: 'IMO Gold',
+    head: { date: '2025.07', title: 'IMO · Gold', caption: 'Gemini Deep Think: 35/42 in natural language, within 4.5 hours.' },
   },
   {
-    id: 'erdos', bar: 16, n: 5, date: [2026, 5, 20], team: 'OAI', short: 'ERDŐS UNIT DIST.',
-    era: 3,
-    card: {
-      title: 'ERDŐS UNIT DISTANCE CONJECTURE DISPROVED',
-      sub: 'Point sets with n^{1+ε} unit distances. Open since 1946.',
-      formula: 'u(n) ≥ n^{1+ε}',
-      chips: ['OPEN 80 YEARS'],
-      status: 'VERIFIED BY MATHEMATICIANS · COMPANION PAPER',
-    },
+    id: 'erdos', bar: 16, n: 5, date: [2026, 5, 20], team: 'OAI', short: 'Erdős',
+    head: { date: '2026.05', title: 'Erdős Unit Distances', caption: 'An OpenAI model disproves an 80-year-old conjecture.' },
   },
   {
-    id: 'jacobian', bar: 18, n: 6, date: [2026, 7, 19], team: 'ANT', short: 'JACOBIAN',
-    era: 3,
-    card: {
-      title: 'JACOBIAN CONJECTURE: COUNTEREXAMPLE',
-      sub: 'Found with Claude: a polynomial map of ℂ^{3} with constant Jacobian that is not invertible.',
-      formula: 'det J_{F} ≡ c ≠ 0,   F(a) = F(b) = F(c)',
-      chips: ['OPEN SINCE 1939', 'DIMENSIONS ≥ 3'],
-      status: 'CHECKABLE BY COMPUTER ALGEBRA',
-    },
+    id: 'jacobian', bar: 18, n: 6, date: [2026, 7, 19], team: 'ANT', short: 'Jacobian',
+    head: { date: '2026.07', title: 'Jacobian Conjecture', caption: 'Claude helps find a counterexample, in 3 dimensions and up.' },
   },
   {
-    id: 'percolation', bar: 20, n: 7, date: [2026, 8, 28], team: 'ANT', short: 'PERCOLATION',
-    era: 3,
-    card: {
-      title: 'CRITICAL PERCOLATION HAS NO INFINITE CLUSTER',
-      sub: 'A Claude-written proof that θ(p_{c}) = 0 in dimensions 3 to 10.',
-      formula: 'θ(p_{c}) = 0',
-      chips: ['LEAN 4 FORMALIZATION'],
-      status: 'AWAITING HUMAN REVIEW',
-    },
+    id: 'percolation', bar: 20, n: 7, date: [2026, 8, 28], team: 'ANT', short: 'Percolation',
+    head: { date: '2026.08', title: 'Critical Percolation', caption: 'A Claude-written Lean proof: θ(p_{c}) = 0 in dimensions 3 to 10.' },
   },
   {
-    id: 'navier', bar: 22, n: 8, date: [2026, 9, 8], team: 'OAI', short: 'NAVIER–STOKES',
-    era: 3,
-    card: {
-      title: 'NAVIER–STOKES: FINITE-TIME BLOW-UP',
-      sub: 'Claimed: a smooth 3D incompressible flow that forms a singularity.',
-      formula: '∂_{t}u + (u·∇)u = −∇p + νΔu',
-      chips: ['10,000 AGENTS · 88 HOURS', 'MILLENNIUM PROBLEM'],
-      status: 'LEAN-FORMALIZED · UNDER EXPERT REVIEW',
-    },
+    id: 'navier', bar: 22, n: 8, date: [2026, 9, 8], team: 'OAI', short: 'Navier–Stokes',
+    head: { date: '2026.09.08', title: 'Navier–Stokes', caption: 'OpenAI claims a finite-time blow-up. Under expert review.' },
   },
   {
-    id: 'papers', bar: 23, n: 9, date: [2026, 10, 6], team: 'OAI', short: '722 MANUSCRIPTS',
-    era: 3,
-    card: {
-      title: '722 MANUSCRIPTS. ONE RELEASE.',
-      sub: 'Research papers from an unreleased internal model, posted at once.',
-      chips: ['~4,000 PROBLEMS POSED'],
-      status: 'MATHEMATICIANS STILL VETTING',
-    },
+    id: 'papers', bar: 23, n: 9, date: [2026, 10, 6], team: 'OAI', short: '722 papers',
+    head: { date: '2026.10.06', title: '722 Manuscripts', caption: 'Released at once by OpenAI, from an unreleased model.' },
   },
   {
-    id: 'yangmills', bar: 24, n: 10, date: [2026, 10, 26], team: 'OAI', short: 'YANG–MILLS',
-    era: 3,
-    card: {
-      title: '4D YANG–MILLS: EXISTENCE',
-      sub: 'Claimed rigorous construction of 4D Yang–Mills and QCD. Mass gap not claimed.',
-      formula: 'S = ¼g^{−2} ∫ tr F_{μν}F^{μν} d^{4}x',
-      chips: ['MILLENNIUM PROBLEM (PART)'],
-      status: 'UNDER REVIEW',
-    },
+    id: 'yangmills', bar: 24, n: 10, date: [2026, 10, 26], team: 'OAI', short: 'Yang–Mills',
+    head: { date: '2026.10.26', title: '4D Yang–Mills', caption: 'OpenAI claims existence. The mass gap is not claimed.' },
   },
   {
-    id: 'eth', bar: 26, n: 11, date: [2026, 10, 27], team: 'OAI', team2: 'ANT', short: 'ETH FALLS',
-    era: 4,
+    id: 'eth', bar: 26, n: 11, date: [2026, 10, 27], team: 'OAI', team2: 'ANT', short: 'ETH',
     found: [2026, 10, 16],
-    card: {
-      title: 'THE EXPONENTIAL TIME HYPOTHESIS IS FALSE',
-      sub: 'Two rival labs, independently: a 2^{o(n)}-time algorithm for 3-SAT.',
-      formula: '3-SAT ∈ TIME(2^{o(n)})',
-      chips: ['BOTH FOUND OCT 16', 'OPENAI · OCT 26', 'ANTHROPIC · OCT 27'],
-      status: 'LEAN-VERIFIED · INDEPENDENT REVIEW UNDERWAY',
-    },
+    head: { date: '2026.10.16', title: 'Exponential Time Hypothesis', caption: 'Refuted by two labs, independently, on the same day.' },
   },
 ];
 
@@ -152,13 +78,6 @@ for (let i = 1; i < MILESTONES.length; i++) {
   m.gapDays = m.found ? 0 : daysBetween(prev.date, m.date);   // ETH: both labs found it the same day
 }
 MILESTONES[0].gapDays = null;
-
-export function fmtGap(days) {
-  if (days === null || days === undefined) return '';
-  if (days === 0) return '+0 DAYS';
-  if (days >= 700) return `+${(days / 365.25).toFixed(1)} YRS`;
-  return `+${days} DAYS`;
-}
 
 export function fmtDate(d) {
   return `${d[0]}.${String(d[1]).padStart(2, '0')}.${String(d[2]).padStart(2, '0')}`;

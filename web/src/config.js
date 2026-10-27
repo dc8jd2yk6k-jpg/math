@@ -1,8 +1,8 @@
 // Global constants. Everything in the film is a pure function of time t
 // (seconds) or, more conveniently, of the musical position b (bars).
 
-export const W = 1920;
-export const H = 1080;
+export const W = 1080;    // 9:16 portrait
+export const H = 1920;
 export const FPS = 60;
 
 export const BPM = 110;                 // measured: the F1 theme is locked to 110 BPM
@@ -18,7 +18,8 @@ export const toTime = (b) => b * BAR;
 
 // Output-bar positions of musical landmarks (see audio/build_soundtrack.py)
 export const CUE = {
-  ignition: 0,      // pulse ostinato starts (loop seam)
+  ignition: 0,      // pulse ostinato starts (loop seam): the rewind
+  shannon: 1,
   drums: 10,        // drums enter  -> Phase II
   gold: 14,         // full theme drop
   frontier: 16,     // chord change -> Phase III
@@ -41,6 +42,7 @@ export const PALETTE = {
   green: '#34f28a',
   yellow: '#ffd23f',
   white: '#f4f7ff',
+  head: '#ff3b2e',      // the only accent colour: the head of the line
 };
 
 export const TEAM = {

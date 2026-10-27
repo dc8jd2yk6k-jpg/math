@@ -1,208 +1,196 @@
-// 2024 → 2025 · the Olympiad inflection.
-// 2024: six problem panels along the climb; P1 P2 P4 P6 light silver (28/42),
-// walls of Lean and a 72-hour compute dial make the constraints visible.
-// 2025 (gold drop): the Lean walls shatter, five panels re-light gold.
+// 2024 · IMO silver: a glass card types the Lean 4 statement of P1 while a
+// compute clock runs toward 72 hours, the constraint of that system.
+// 2025 · IMO gold: the construction of IMO 2025 Problem 2, drawn stroke by
+// stroke: Ω, Γ, A–F, P, H, and the tangent line the problem asks to prove.
 import * as THREE from 'three';
-import { Piece } from './common.js';
-import { makeSegments, makePoints, textPlane, textTexture } from '../gfx/glow.js';
-import { frameAt, spineAt, headAt } from '../curve.js';
-import { IMO24, IMO25, LEAN_SNIPPET } from '../data.js';
-import { rng, clamp, ease, smoothstep, hexToRgb } from '../util.js';
-import { PALETTE } from '../config.js';
+import { Piece, WHITE, DIM } from './common.js';
+import { makeSegments, makePoints } from '../gfx/glow.js';
+import { frameAt, spineAt } from '../curve.js';
+import { IMO24 } from '../data.js';
+import { clamp, ease } from '../util.js';
+import { FONTS } from '../hud/text.js';
 
-function hexSegs(r, color, width = 0.1) {
-  const s = [];
-  for (let i = 0; i < 6; i++) {
-    const a0 = Math.PI / 6 + (i * Math.PI) / 3, a1 = Math.PI / 6 + ((i + 1) * Math.PI) / 3;
-    s.push({ a: new THREE.Vector3(Math.cos(a0) * r, Math.sin(a0) * r, 0), b: new THREE.Vector3(Math.cos(a1) * r, Math.sin(a1) * r, 0), color, width });
-  }
-  return s;
-}
+const LEAN = [
+  ['kw', 'theorem '], ['id', 'imo2024_p1'], ['tx', ' :'], ['nl'],
+  ['tx', '  {α : ℝ | ∀ n : ℕ, 0 < n →'], ['nl'],
+  ['tx', '    (n : ℤ) ∣ ∑ i ∈ Finset.Icc 1 n, ⌊i * α⌋}'], ['nl'],
+  ['tx', '  = {α : ℝ | ∃ k : ℤ, Even k ∧ α = k} := '], ['kw', 'by'],
+];
 
-function hexFill(r) {
-  const shape = new THREE.Shape();
-  for (let i = 0; i < 6; i++) {
-    const a = Math.PI / 6 + (i * Math.PI) / 3;
-    if (i === 0) shape.moveTo(Math.cos(a) * r, Math.sin(a) * r); else shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-  }
-  return new THREE.ShapeGeometry(shape);
-}
-
-const fillMat = () => new THREE.ShaderMaterial({
-  uniforms: { uColor: { value: new THREE.Color() }, uGain: { value: 0 }, uTime: { value: 0 }, uPixel: { value: 1 } },
-  vertexShader: 'varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-  fragmentShader: 'uniform vec3 uColor; uniform float uGain; varying vec2 vP; void main(){ float r = length(vP); gl_FragColor = vec4(uColor * uGain * (0.08 + 0.3 * smoothstep(1.2, 2.5, r)), 1.0); }',
-  transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-});
-
-export class IMO extends Piece {
-  constructor(A) {
-    super(9.6, 16.4, 0.3, 0.6);
-    const silver = hexToRgb(PALETTE.silver), gold = hexToRgb(PALETTE.gold), red = hexToRgb(PALETTE.red);
-    this.panels = [];
-    for (let k = 0; k < 6; k++) {
-      const bk = 10.35 + k * 0.62;
-      const f = frameAt(bk);
-      const side = k % 2 === 0 ? 1 : -1;
-      const g = new THREE.Group();
-      const pos = f.S.clone().addScaledVector(f.Z, side * 6.2).addScaledVector(f.N, (k % 3 - 1) * 1.2);
-      // face the spine: panel normal = -side*Z, up = T
-      const m = new THREE.Matrix4().makeBasis(f.N.clone().multiplyScalar(-side), f.T, f.Z.clone().multiplyScalar(-side));
-      g.matrixAutoUpdate = false;
-      g.matrix.copy(m).setPosition(pos);
-      const outline = makeSegments(hexSegs(2.4, [1, 1, 1], 0.09), { minPx: 1.6, core: 1 });
-      const inner = makeSegments(hexSegs(2.05, [1, 1, 1], 0.04), { minPx: 1, core: 0.5 });
-      const fill = new THREE.Mesh(hexFill(2.4), fillMat());
-      fill.frustumCulled = false;
-      const label = textPlane(`P${k + 1}`, 1.25, [1, 1, 1], { font: 'title', px: 110 });
-      label.position.set(0, 0.55, 0.01);
-      const score = textPlane('7', 0.9, [1, 1, 1], { font: 'monob', px: 110 });
-      score.position.set(0, -0.75, 0.01);
-      const x = makeSegments([
-        { a: new THREE.Vector3(-1.2, -1.2, 0), b: new THREE.Vector3(1.2, 1.2, 0), color: red.map((c) => c * 1.6), width: 0.16 },
-        { a: new THREE.Vector3(-1.2, 1.2, 0), b: new THREE.Vector3(1.2, -1.2, 0), color: red.map((c) => c * 1.6), width: 0.16 },
-      ], { minPx: 2, core: 1 });
-      [outline, inner, fill, label, score, x].forEach((o) => g.add(o));
-      this.root.add(g);
-      this.panels.push({ g, outline, inner, fill, label, score, x, bk, k, world: pos });
-    }
-
-    // Lean walls (the constraint): code planes left and right of the climb
-    const tex = textTexture(LEAN_SNIPPET, { font: 'mono', px: 44, lineHeight: 1.45, pad: 30, color: '#fff' });
-    tex.tex.wrapT = THREE.RepeatWrapping;
-    this.walls = [];
-    for (const side of [1, -1]) {
-      const f = frameAt(11.8);
-      const hgt = 30, wid = hgt * tex.aspect * 0.55;
-      const geo = new THREE.PlaneGeometry(wid, hgt);
-      const mat = new THREE.ShaderMaterial({
-        uniforms: { map: { value: tex.tex }, uGain: { value: 0 }, uScroll: { value: 0 }, uTime: { value: 0 }, uPixel: { value: 1 }, uColor: { value: new THREE.Color(0.55, 1.0, 0.75) } },
-        vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-        fragmentShader: /* glsl */`
-          uniform sampler2D map; uniform float uGain; uniform float uScroll; uniform vec3 uColor; varying vec2 vUv;
-          void main() {
-            vec2 uv = vec2(vUv.x, fract(vUv.y * 1.6 + uScroll));
-            float a = texture2D(map, uv).a;
-            float edge = smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y) * smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x);
-            gl_FragColor = vec4(uColor * a * uGain * edge, 1.0);
-          }`,
-        transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-      });
-      const w = new THREE.Mesh(geo, mat);
-      w.frustumCulled = false;
-      const pos = f.S.clone().addScaledVector(f.Z, side * 15).addScaledVector(f.N, -2);
-      const m = new THREE.Matrix4().makeBasis(f.N.clone().multiplyScalar(-side), f.T, f.Z.clone().multiplyScalar(-side));
-      w.matrixAutoUpdate = false;
-      w.matrix.copy(m).setPosition(pos);
-      this.root.add(w);
-      this.walls.push(w);
-    }
-    // shatter particles sampled on the walls
-    const r = rng(77);
-    const shards = [];
-    for (const w of this.walls) {
-      const hp = w.geometry.parameters;
-      for (let i = 0; i < 1400; i++) {
-        const lp = new THREE.Vector3((r() - 0.5) * hp.width, (r() - 0.5) * hp.height, 0).applyMatrix4(w.matrix);
-        const dir = new THREE.Vector3(r() - 0.5, r() - 0.5, r() - 0.5).normalize();
-        shards.push({ p: lp, color: [0.5, 1.0, 0.7], size: 0.12 + r() * 0.12, born: 14.0, die: 15.4, fadeIn: 0.01, fadeOut: 1.0, motion: [dir.x, dir.y, dir.z, 6 + r() * 14] });
-      }
-    }
-    this.shards = makePoints(shards, {
-      minPx: 1.5, maxPx: 8,
-      displace: { body: 'float tt = max(uTime - 14.0, 0.0); P += motion.xyz * motion.w * (1.0 - exp(-tt * 2.5));' },
+export class LeanCard extends Piece {
+  constructor() {
+    super(9.8, 14.0, 0.3, 0.25);
+    const f = frameAt(11.8);
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = 1024; this.canvas.height = 700;
+    this.ctx = this.canvas.getContext('2d');
+    this.tex = new THREE.CanvasTexture(this.canvas);
+    this.tex.colorSpace = THREE.NoColorSpace;
+    this.tex.premultiplyAlpha = true;
+    this.tex.anisotropy = 8;
+    const w = 9.2, h = w * 700 / 1024;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: this.tex }, uGain: { value: 1 }, uTime: { value: 0 }, uPixel: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: 'uniform sampler2D map; uniform float uGain; varying vec2 vUv; void main(){ vec4 c = texture2D(map, vUv); c.rgb = pow(max(c.rgb, 0.0) / max(c.a, 1e-4), vec3(2.2)) * c.a; gl_FragColor = c * uGain; }',
+      transparent: true, depthWrite: false, depthTest: false, blending: THREE.CustomBlending,
+      blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, side: THREE.DoubleSide,
     });
-    this.root.add(this.shards);
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    this.mesh.frustumCulled = false;
+    const c = spineAt(12.0).addScaledVector(f.U, -2.0).addScaledVector(f.R, 0.2).addScaledVector(f.F, -1.0);
+    const yaw = new THREE.Quaternion().setFromAxisAngle(f.U, -0.16);
+    const m = new THREE.Matrix4().makeBasis(f.R.clone().applyQuaternion(yaw), f.U, f.F.clone().applyQuaternion(yaw));
+    this.mesh.matrixAutoUpdate = false;
+    this.mesh.matrix.copy(m.setPosition(c));
+    this.root.add(this.mesh);
+    this.center = c.clone().addScaledVector(f.U, 1.5);
+  }
 
-    // 72-hour compute dial
-    const fd = frameAt(11.0);
-    this.dial = new THREE.Group();
-    const dpos = fd.S.clone().addScaledVector(fd.Z, -10).addScaledVector(fd.N, 6.5);
-    const dm = new THREE.Matrix4().makeBasis(fd.N.clone().negate(), fd.T, fd.Z.clone().negate());
-    this.dial.matrixAutoUpdate = false; this.dial.matrix.copy(dm).setPosition(dpos);
-    const ticks = [];
-    for (let i = 0; i < 72; i++) {
-      const a = Math.PI / 2 - (i / 72) * Math.PI * 2;
-      const r0 = i % 6 === 0 ? 3.6 : 3.9;
-      ticks.push({ a: new THREE.Vector3(Math.cos(a) * r0, Math.sin(a) * r0, 0), b: new THREE.Vector3(Math.cos(a) * 4.4, Math.sin(a) * 4.4, 0), color: [1, 0.45, 0.4], width: 0.07, born: 10.3 + (i / 72) * 3.4, grow: 0.02 });
+  draw(b) {
+    const ctx = this.ctx, W = 1024, H = 700;
+    ctx.clearRect(0, 0, W, H);
+    const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); };
+    rr(6, 6, W - 12, H - 12, 34);
+    ctx.fillStyle = 'rgba(28,30,34,0.78)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = FONTS.inter(26, 500); ctx.fillStyle = 'rgba(210,214,222,0.75)';
+    ctx.fillText('AlphaProof · Lean 4', 48, 70);
+    ctx.textAlign = 'right'; ctx.fillText('IMO 2024 · P1', W - 48, 70); ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(48, 96, W - 96, 2);
+    // typed Lean statement
+    const total = LEAN.reduce((a, t) => a + (t[1] ? t[1].length : 0), 0);
+    let left = Math.floor(clamp((b - 10.15) / 1.1) * total);
+    let x = 48, y = 158;
+    ctx.font = FONTS.mono(27, 400);
+    for (const [k, s] of LEAN) {
+      if (k === 'nl') { x = 48; y += 50; continue; }
+      if (left <= 0) break;
+      const part = s.slice(0, left); left -= s.length;
+      ctx.fillStyle = k === 'kw' ? '#ffffff' : k === 'id' ? '#e6e8ee' : 'rgba(205,210,220,0.86)';
+      ctx.fillText(part, x, y);
+      x += ctx.measureText(part).width;
     }
-    this.ticks = makeSegments(ticks, { minPx: 1.4, core: 1 });
-    this.hand = makeSegments([{ a: new THREE.Vector3(0, 0, 0), b: new THREE.Vector3(0, 3.3, 0), color: [1.5, 0.7, 0.6], width: 0.14 }], { minPx: 2, core: 1 });
-    this.dialLabel = textPlane('72 H', 1.2, [1, 0.55, 0.5], { font: 'monob', px: 100 });
-    this.dialLabel.position.set(0, -1.6, 0);
-    this.dial.add(this.ticks); this.dial.add(this.hand); this.dial.add(this.dialLabel);
-    this.root.add(this.dial);
-    this.dialWorld = dpos;
-
-    // gold burst at the drop
-    const burst = [];
-    const o = headAt(14);
-    for (let i = 0; i < 2600; i++) {
-      const dir = new THREE.Vector3(r() - 0.5, r() - 0.5, r() - 0.5).normalize();
-      const sp = 4 + Math.pow(r(), 0.6) * 26;
-      burst.push({ p: o, color: [1.6, 1.0, 0.35].map((c) => c * (0.6 + r() * 0.8)), size: 0.1 + r() * 0.18, born: 14.0, die: 15.8, fadeIn: 0.01, fadeOut: 1.2, motion: [dir.x, dir.y, dir.z, sp] });
+    if (left <= 0 && Math.floor(b * 4) % 2 === 0 && b < 11.6) { ctx.fillStyle = '#fff'; ctx.fillRect(x + 4, y - 24, 14, 30); }
+    // compute clock: up to 72 hours per problem
+    const hrs = 72 * ease.inOutSine(clamp((b - 10.6) / 3.0));
+    const hh = Math.floor(hrs), mm = Math.floor((hrs - hh) * 60), ss = Math.floor(((hrs - hh) * 60 - mm) * 60);
+    ctx.font = FONTS.inter(24, 500); ctx.fillStyle = 'rgba(210,214,222,0.7)';
+    ctx.fillText('compute', 48, 452);
+    ctx.font = FONTS.mono(54, 300); ctx.fillStyle = '#ffffff';
+    ctx.fillText(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`, 48, 516);
+    ctx.font = FONTS.inter(24, 400); ctx.fillStyle = 'rgba(210,214,222,0.55)';
+    ctx.fillText('humans get 4.5 hours', 48, 556);
+    // problems P1..P6
+    for (let i = 0; i < 6; i++) {
+      const bx = 470 + i * 84, by = 430;
+      const hit = 10.5 + [0, 0.25, 0, 0.5, 0, 0.75][i];
+      const solved = IMO24[i] > 0 && b >= hit;
+      ctx.strokeStyle = solved ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2;
+      rr(bx, by, 70, 70, 14); ctx.stroke();
+      if (solved) { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fill(); }
+      ctx.font = FONTS.inter(26, 600); ctx.textAlign = 'center';
+      ctx.fillStyle = solved ? '#fff' : 'rgba(255,255,255,0.35)';
+      ctx.fillText(`P${i + 1}`, bx + 35, by + 44);
+      ctx.textAlign = 'left';
     }
-    this.burst = makePoints(burst, {
-      minPx: 1.5, maxPx: 10,
-      displace: { body: 'float tt = max(uTime - 14.0, 0.0); P += motion.xyz * motion.w * (1.0 - exp(-tt * 3.0));' },
-    });
-    this.root.add(this.burst);
-    this.silver = silver; this.gold = gold; this.red = red;
+    if (b > 11.5) {
+      ctx.globalAlpha = clamp((b - 11.5) / 0.2);
+      ctx.font = FONTS.inter(30, 600); ctx.fillStyle = '#fff'; ctx.textAlign = 'right';
+      ctx.fillText('28 / 42', W - 48, 556);
+      ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+    }
+    this.tex.needsUpdate = true;
   }
 
   update(b, ctx) {
     if (!super.update(b, ctx)) return;
-    const g = this.g;
-    const isGold = b >= 14;
-    for (const P of this.panels) {
-      const appear = ease.outBack(clamp((b - (10.05 + P.k * 0.1)) / 0.15));
-      const sc = Math.max(0.001, appear);
-      [P.outline, P.inner, P.fill, P.label, P.score, P.x].forEach((o) => o.scale.setScalar(sc));
-      const solved24 = IMO24[P.k] > 0, solved25 = IMO25[P.k] > 0;
-      const tHit24 = 10.5 + [0, 0.25, 0, 0.5, 0, 0.75][P.k];
-      const lit24 = solved24 && b >= tHit24;
-      const tHit25 = 14.0 + P.k * 0.0625;
-      const lit25 = solved25 && b >= tHit25;
-      let col = [0.35, 0.4, 0.5];
-      let fillG = 0;
-      if (isGold) {
-        col = lit25 ? this.gold.map((c) => c * 1.6) : [0.35, 0.3, 0.3];
-        fillG = lit25 ? 0.9 + 1.5 * Math.exp(-(b - tHit25) * 4) : 0;
-      } else if (lit24) {
-        col = this.silver.map((c) => c * 1.4);
-        fillG = 0.6 + 1.2 * Math.exp(-(b - tHit24) * 5);
-      } else if (!solved24 && b > 11.4) col = this.red.map((c) => c * 0.9);
-      P.outline.material.uniforms.uGain.value = g * appear;
-      P.outline.material.uniforms.uTime.value = b;
-      P.inner.material.uniforms.uGain.value = g * appear * 0.6;
-      for (const o of [P.outline, P.inner]) {
-        const cAttr = o.geometry.attributes.color;
-        for (let i = 0; i < cAttr.count; i++) cAttr.setXYZ(i, col[0], col[1], col[2]);
-        cAttr.needsUpdate = true;
+    this.draw(b);
+    this.mesh.material.uniforms.uGain.value = this.g;
+  }
+}
+
+// ---------------------------------------------------------------- IMO 2025 P2
+function circumcenter(a, b, c) {
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  const ux = ((a.x ** 2 + a.y ** 2) * (b.y - c.y) + (b.x ** 2 + b.y ** 2) * (c.y - a.y) + (c.x ** 2 + c.y ** 2) * (a.y - b.y)) / d;
+  const uy = ((a.x ** 2 + a.y ** 2) * (c.x - b.x) + (b.x ** 2 + b.y ** 2) * (a.x - c.x) + (c.x ** 2 + c.y ** 2) * (b.x - a.x)) / d;
+  return new THREE.Vector2(ux, uy);
+}
+
+export function imo2025p2() {
+  const V = (x, y) => new THREE.Vector2(x, y);
+  const r = 1, d = 1.15, R = 1.5;
+  const M = V(0, 0), N = V(d, 0);
+  const xA = (d * d + r * r - R * R) / (2 * d), yA = Math.sqrt(r * r - xA * xA);
+  const A = V(xA, yA), B = V(xA, -yA);
+  const C = V(-r, 0), D = V(d + R, 0);
+  const P = circumcenter(A, C, D);
+  const v = P.clone().sub(A);
+  const second = (O) => A.clone().addScaledVector(v, -2 * A.clone().sub(O).dot(v) / v.lengthSq());
+  const E = second(M), F = second(N);
+  // orthocentre of PMN: MN is horizontal, so one altitude is x = P.x
+  const pn = N.clone().sub(P);
+  const H = V(P.x, -(pn.x / pn.y) * P.x);
+  const Q = circumcenter(B, E, F), rq = Q.distanceTo(B);
+  const vn = v.clone().normalize();
+  const T = H.clone().addScaledVector(vn, Q.clone().sub(H).dot(vn));   // foot of Q on the parallel through H
+  return { r, R, d, M, N, A, B, C, D, P, E, F, H, Q, rq, T, v: vn, tangentError: Math.abs(Q.distanceTo(T) - rq) };
+}
+
+export class Geometry extends Piece {
+  constructor() {
+    super(13.85, 16.15, 0.2, 0.3);
+    const g = imo2025p2();
+    this.check = g.tangentError;   // ~1e-15: the construction really is tangent
+    const f = frameAt(15.0);
+    const s = 2.3;
+    const origin = spineAt(15.0).addScaledVector(f.U, -2.5).addScaledVector(f.R, -1.9).addScaledVector(f.F, -2);
+    const W = (p) => origin.clone().addScaledVector(f.R, p.x * s).addScaledVector(f.U, p.y * s);
+    this.center = W(new THREE.Vector2(0.8, -0.2)).addScaledVector(f.U, 1.5);
+    const segs = [];
+    const circle = (O, rad, t0, dur, col, width = 0.05) => {
+      const n = 120;
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2 + 1.2, a1 = ((i + 1) / n) * Math.PI * 2 + 1.2;
+        segs.push({ a: W(new THREE.Vector2(O.x + Math.cos(a0) * rad, O.y + Math.sin(a0) * rad)), b: W(new THREE.Vector2(O.x + Math.cos(a1) * rad, O.y + Math.sin(a1) * rad)), color: col, width, born: t0 + (i / n) * dur, grow: dur / n + 0.002 });
       }
-      P.fill.material.uniforms.uColor.value.setRGB(...(isGold ? this.gold : this.silver));
-      P.fill.material.uniforms.uGain.value = g * fillG;
-      P.label.material.uniforms.uGain.value = g * appear * 1.2;
-      const showScore = isGold ? b >= tHit25 : b >= Math.min(tHit24, 11.4);
-      P.score.visible = showScore && (isGold ? solved25 : solved24);
-      P.score.material.uniforms.uGain.value = g * 1.4;
-      P.score.material.uniforms.uColor.value.setRGB(...(isGold ? this.gold.map((c) => c * 1.3) : [1.2, 1.25, 1.35]));
-      const showX = isGold ? !solved25 && b >= tHit25 : !solved24 && b > 11.4;
-      P.x.visible = showX;
-      P.x.material.uniforms.uGain.value = g * (0.8 + 0.2 * ctx.beat);
-    }
-    const wallG = g * smoothstep(10.0, 10.6, b) * (1 - smoothstep(13.97, 14.05, b));
-    for (const w of this.walls) {
-      w.material.uniforms.uGain.value = wallG * 0.55;
-      w.material.uniforms.uScroll.value = b * 0.06;
-    }
-    this.shards.material.uniforms.uGain.value = g;
-    const dg = g * smoothstep(10.2, 10.6, b) * (1 - smoothstep(13.9, 14.1, b));
-    this.dial.visible = dg > 0.001;
-    this.ticks.material.uniforms.uGain.value = dg;
-    this.hand.material.uniforms.uGain.value = dg;
-    this.hand.rotation.z = -((b - 10.3) / 3.4) * Math.PI * 2;
-    this.dialLabel.material.uniforms.uGain.value = dg;
-    this.burst.material.uniforms.uGain.value = g * 1.2;
+    };
+    const line = (a, b, t0, dur, col, width = 0.045) => segs.push({ a: W(a), b: W(b), color: col, width, born: t0, grow: dur });
+    const L = (p, dir, l0, l1) => [p.clone().addScaledVector(dir, l0), p.clone().addScaledVector(dir, l1)];
+    circle(g.M, g.r, 14.0, 0.35, WHITE);
+    circle(g.N, g.R, 14.1, 0.35, WHITE);
+    line(new THREE.Vector2(-1.35, 0), new THREE.Vector2(g.D.x + 0.35, 0), 14.3, 0.2, DIM);
+    circle(circumcenter(g.A, g.C, g.D), g.P.distanceTo(g.A), 14.55, 0.3, DIM, 0.035);
+    const [a1, a2] = L(g.A, g.v, -0.3, g.A.distanceTo(g.F) + 0.3);
+    line(a1, a2, 14.8, 0.15, WHITE);
+    line(g.P, g.M, 14.95, 0.08, DIM); line(g.M, g.N, 14.95, 0.08, DIM); line(g.N, g.P, 15.0, 0.08, DIM);
+    line(g.P, new THREE.Vector2(g.P.x, 0), 15.1, 0.1, DIM, 0.03);
+    line(g.M, g.H.clone().multiplyScalar(1.15), 15.12, 0.1, DIM, 0.03);
+    const [h1, h2] = L(g.H, g.v, -2.4, 2.6);
+    line(h1, h2, 15.3, 0.2, WHITE, 0.055);
+    circle(g.Q, g.rq, 15.45, 0.35, WHITE, 0.055);
+    this.lines = makeSegments(segs, { minPx: 1.8, core: 0.8 });
+    this.root.add(this.lines);
+    const pts = [
+      ['M', g.M, 14.35], ['N', g.N, 14.38], ['A', g.A, 14.4], ['B', g.B, 14.43], ['C', g.C, 14.46], ['D', g.D, 14.49],
+      ['P', g.P, 14.75], ['E', g.E, 14.9], ['F', g.F, 14.93], ['H', g.H, 15.25],
+    ];
+    this.dots = makePoints(pts.map(([, p, t]) => ({ p: W(p), color: [1.3, 1.3, 1.35], size: 0.22, born: t, fadeIn: 0.04 })), { minPx: 4, maxPx: 9 });
+    this.tangent = makePoints([{ p: W(g.T), color: [2.2, 2.2, 2.3], size: 0.5, born: 15.8, fadeIn: 0.03 }], { minPx: 7, maxPx: 22 });
+    this.root.add(this.dots, this.tangent);
+    const lab = (txt, p, t, dx = 22, dy = -18) => ({ p: W(p), text: txt, b0: t, b1: 16.1, dx, dy, italic: true, size: 30 });
+    this.labels = [
+      lab('Ω', new THREE.Vector2(g.M.x - 0.72, g.M.y + 0.72), 14.2), lab('Γ', new THREE.Vector2(g.N.x + 1.1, g.N.y + 1.1), 14.3),
+      ...pts.map(([t, p, tt]) => lab(t, p, tt, t === 'C' ? -34 : 16, t === 'B' || t === 'H' ? 34 : -16)),
+    ];
+  }
+
+  update(b, ctx) {
+    if (!super.update(b, ctx)) return;
+    this.lines.material.uniforms.uGain.value = this.g;
+    this.dots.material.uniforms.uGain.value = this.g;
+    const tk = b >= 15.8 ? 0.6 + 1.4 * Math.exp(-(b - 15.8) * 6) : 0;
+    this.tangent.material.uniforms.uGain.value = this.g * tk;
   }
 }

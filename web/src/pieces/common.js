@@ -1,51 +1,39 @@
 import * as THREE from 'three';
-import { frameAt, spineAt, headAt } from '../curve.js';
 import { setUniforms } from '../gfx/glow.js';
 import { envelope } from '../util.js';
 
-// world anchors for set pieces and camera moves
-export function computeAnchors() {
-  const off = (b, t, n, z) => {
-    const f = frameAt(b);
-    return f.S.clone().addScaledVector(f.T, t).addScaledVector(f.N, n).addScaledVector(f.Z, z);
-  };
-  const A = {
-    chess: off(2.0, 7, -13, 0),
-    go: off(6.0, 9, -13, 0),
-    imo: off(11.6, 0, 0, 0),
-    erdos: off(16.6, 0, 0, -6.5),
-    jacobian: off(18.6, 0, 1.5, 6.5),
-    percolation: off(20.55, 0, 0, 0),
-    navier: off(22.45, 0, 0.5, -6),
-    papers: off(23.2, 0, 0, 0),
-    yangmills: off(24.4, 0, 0, 5.5),
-    finish: spineAt(26),
-  };
-  A.chartCenter = new THREE.Vector3(134, 128, 0);
-  return A;
-}
-
-// basis matrix from a frame (columns T, N, Z) placed at origin `o`
-export function frameMatrix(b, o) {
-  const f = frameAt(b);
-  const m = new THREE.Matrix4().makeBasis(f.T, f.N, f.Z);
-  m.setPosition(o);
-  return m;
-}
-
+// A set piece: visible over [b0, b1] with fades. `center` is where the camera
+// looks while the piece is on screen; `labels` are italic captions the HUD
+// draws next to 3D points: { p: Vector3, text, b0, b1, dx, dy, size }.
 export class Piece {
-  constructor(b0, b1, fi = 0.25, fo = 0.5) {
+  constructor(b0, b1, fi = 0.25, fo = 0.4) {
     this.root = new THREE.Group();
     this.b0 = b0; this.b1 = b1; this.fi = fi; this.fo = fo;
+    this.center = new THREE.Vector3();
+    this.labels = [];
+    this.g = 0;
   }
   gain(b) { return envelope(b, this.b0, this.b1, this.fi, this.fo); }
   update(b, ctx) {
-    const g = this.gain(b) * (ctx.pieceGain ?? 1);
+    const g = this.gain(b);
     this.root.visible = g > 0.001;
+    this.g = g;
     if (!this.root.visible) return false;
     setUniforms(this.root, { uTime: b, uPixel: ctx.pixelScale });
-    this.g = g;
     return true;
   }
-  setGain(obj, v) { setUniforms(obj, { uGain: v }); }
+}
+
+// line-art colour: everything except the head is monochrome
+export const WHITE = [0.92, 0.93, 0.96];
+export const DIM = [0.42, 0.44, 0.48];
+
+// fade a realistic (lit) object in or out
+export function setOpacity(obj, a) {
+  obj.traverse((o) => {
+    if (!o.material || o.material.isShaderMaterial) return;
+    o.material.transparent = a < 0.999;
+    o.material.opacity = a;
+    o.material.depthWrite = a > 0.5;
+  });
 }

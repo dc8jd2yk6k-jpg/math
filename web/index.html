@@ -8,7 +8,7 @@
   :root { --fg: #e9eefb; --dim: #8291ad; }
   html, body { margin: 0; height: 100%; background: #000; color: var(--fg); font: 13px/1.4 "JetBrains Mono", ui-monospace, monospace; overflow: hidden; }
   #stage { position: fixed; inset: 0; display: grid; place-items: center; }
-  canvas { width: min(100vw, calc(100vh * 16 / 9)); height: auto; aspect-ratio: 16 / 9; display: block; background: #000; cursor: pointer; }
+  canvas { height: min(100vh, calc(100vw * 16 / 9)); width: auto; aspect-ratio: 9 / 16; display: block; background: #000; cursor: pointer; }
   #ui { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px; display: flex; gap: 12px; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,.7)); transition: opacity .3s; }
   #ui.hidden { opacity: 0; }
   #ui button { background: none; border: 1px solid #fff4; color: var(--fg); width: 34px; height: 28px; border-radius: 4px; cursor: pointer; }

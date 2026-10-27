@@ -1,12 +1,7 @@
 // Tiny rich-text typesetter for Canvas2D: supports ^{sup} and _{sub}.
 export const FONTS = {
-  black: (s) => `900 ${s}px "Titillium Web"`,
-  bold: (s) => `700 ${s}px "Titillium Web"`,
-  semi: (s) => `600 ${s}px "Titillium Web"`,
-  reg: (s) => `400 ${s}px "Titillium Web"`,
-  light: (s) => `300 ${s}px "Titillium Web"`,
-  mono: (s) => `500 ${s}px "JetBrains Mono"`,
-  monob: (s) => `800 ${s}px "JetBrains Mono"`,
+  inter: (s, w = 400) => `${w} ${s}px "Inter"`,
+  mono: (s, w = 500) => `${w} ${s}px "JetBrains Mono"`,
   math: (s) => `italic 400 ${s}px "STIX Two Text"`,
   mathr: (s) => `400 ${s}px "STIX Two Text"`,
 };

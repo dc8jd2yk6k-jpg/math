@@ -20,7 +20,8 @@ export async function openFilm(port, { log = false } = {}) {
   await page.waitForFunction(() => (window.__film && window.__film.ready) || window.__filmError, null, { timeout: 120000 });
   const err = await page.evaluate(() => window.__filmError);
   if (err) throw new Error(err);
-  return { browser, page };
+  const size = await page.evaluate(() => window.__film.size);
+  return { browser, page, size: `${size[0]}x${size[1]}` };
 }
 
 // render frame n in the page and pull the packed YUV420 bytes out as a Buffer

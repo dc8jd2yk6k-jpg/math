@@ -41,7 +41,7 @@ export class CameraRig {
     ];
 
     this.chartCenter = chartCenter;
-    this.cam = new THREE.PerspectiveCamera(40, 9 / 16, 0.05, 8000);
+    this.cam = new THREE.PerspectiveCamera(40, 9 / 16, 1.0, 4000);
   }
 
   // scalar/array track value at b: holds within a shot, eases between shots

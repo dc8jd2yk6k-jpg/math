@@ -2,7 +2,7 @@
 // the 16th-note grid; Move 37, the fifth-line shoulder hit, lands on bar 8
 // and gets a white ring.
 import * as THREE from 'three';
-import { Piece, setOpacity } from './common.js';
+import { Piece, setOpacity, contactShadow } from './common.js';
 import { tiltedBasis } from './chess.js';
 import { makeSegments } from '../gfx/glow.js';
 import { spineAt } from '../curve.js';
@@ -63,7 +63,6 @@ export class Go extends Piece {
     const side = new THREE.MeshStandardMaterial({ color: 0xb98848, roughness: 0.7 });
     const board = new THREE.Mesh(new THREE.BoxGeometry(size, 1.0, size), [side, side, wood, side, side, side]);
     board.position.y = -0.5;
-    board.receiveShadow = true;
     this.local.add(board);
 
     const geo = new THREE.SphereGeometry(SP * 0.47, 40, 20);
@@ -74,9 +73,10 @@ export class Go extends Piece {
     this.stones = GO_MOVES.map(([col, x, y], i) => {
       const m = new THREE.Mesh(geo, (col === 'W' ? wMat : bMat).clone());
       m.position.set((x - 9) * SP, 0, (y - 9) * SP);
-      m.castShadow = true;
-      m.userData = { t: moveBar(i) };
-      this.local.add(m);
+      const blob = contactShadow(SP * 0.62);
+      blob.position.set(m.position.x, 0.01, m.position.z);
+      m.userData = { t: moveBar(i), blob };
+      this.local.add(m, blob);
       return m;
     });
     const s37 = this.stones[36].position;
@@ -100,7 +100,7 @@ export class Go extends Piece {
     setOpacity(this.root, this.g);
     this.stones.forEach((m, i) => {
       const k = clamp((b - m.userData.t) / 0.06);
-      m.visible = b >= m.userData.t;
+      m.visible = m.userData.blob.visible = b >= m.userData.t;
       m.position.y = (1 - ease.outCubic(k)) * (i === 36 ? 1.8 : 0.9);
     });
     this.ring.material.uniforms.uGain.value = this.g * 1.4;

@@ -2,7 +2,7 @@
 // Game 6 (Kasparov resigned after 19.c4). Pieces settle on the 16th notes; the
 // black king tips over on bar 4.5.
 import * as THREE from 'three';
-import { Piece, setOpacity } from './common.js';
+import { Piece, setOpacity, contactShadow } from './common.js';
 import { frameAt, spineAt } from '../curve.js';
 import { CHESS_FEN } from '../data.js';
 import { rng, clamp, ease } from '../util.js';
@@ -95,10 +95,8 @@ export class Chess extends Piece {
     const top = new THREE.Mesh(new THREE.PlaneGeometry(8 * SQ, 8 * SQ), new THREE.MeshStandardMaterial({ map: boardTexture(), roughness: 0.55, metalness: 0 }));
     top.rotation.x = -Math.PI / 2;
     top.position.y = 0.001;
-    top.receiveShadow = true;
     const frame = new THREE.Mesh(new THREE.BoxGeometry(8 * SQ + 1.0, 0.4, 8 * SQ + 1.0), new THREE.MeshStandardMaterial({ color: 0x1d1714, roughness: 0.6 }));
-    frame.position.y = -0.2;
-    frame.receiveShadow = true;
+    frame.position.y = -0.26;   // top sits below the playing surface (no z-fighting)
     this.local.add(top, frame);
 
     const white = new THREE.MeshStandardMaterial({ color: 0xf1ede4, roughness: 0.32, metalness: 0 });
@@ -113,11 +111,12 @@ export class Chess extends Piece {
         const m = new THREE.Mesh(pieceGeometry(ch.toLowerCase(), SQ * 0.92), (isWhite ? white : black).clone());
         m.position.set((file - 3.5) * SQ, 0, (ri - 3.5) * SQ);
         if (!isWhite && ch.toLowerCase() === 'n') m.rotation.y = Math.PI;
-        m.castShadow = true;
-        m.receiveShadow = true;
         m.userData = { t: 2.0 + Math.floor(r() * 8) * 0.0625, x: m.position.x };
         if (ch === 'k') this.king = m;
-        this.local.add(m);
+        const blob = contactShadow(SQ * 0.5);
+        blob.position.x = m.position.x; blob.position.z = m.position.z;
+        m.userData.blob = blob;
+        this.local.add(m, blob);
         this.pieces.push(m);
         file++;
       }
@@ -131,7 +130,7 @@ export class Chess extends Piece {
     for (const m of this.pieces) {
       const k = clamp((b - m.userData.t) / 0.12);
       m.position.y = (1 - ease.outCubic(k)) * 2.2;
-      m.visible = b >= m.userData.t - 0.01;
+      m.visible = m.userData.blob.visible = b >= m.userData.t - 0.01;
     }
     // resignation: the black king tips over
     const tip = ease.outQuad(clamp((b - 4.5) / 0.35));

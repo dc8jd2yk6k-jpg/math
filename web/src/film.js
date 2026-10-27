@@ -26,19 +26,12 @@ export class Film {
     r.autoClear = false;
     r.outputColorSpace = THREE.LinearSRGBColorSpace;
     r.toneMapping = THREE.NoToneMapping;
-    r.shadowMap.enabled = true;
-    r.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
     const pmrem = new THREE.PMREMGenerator(r);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.32;
     this.key = new THREE.DirectionalLight(0xfff4e8, 1.7);
-    this.key.castShadow = true;
-    this.key.shadow.mapSize.set(2048, 2048);
-    Object.assign(this.key.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 120 });
-    this.key.shadow.bias = -0.0004;
-    this.key.shadow.normalBias = 0.03;
     this.scene.add(this.key, this.key.target);
 
     this.world = new World();

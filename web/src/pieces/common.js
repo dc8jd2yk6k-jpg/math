@@ -28,8 +28,27 @@ export class Piece {
 export const WHITE = [0.92, 0.93, 0.96];
 export const DIM = [0.42, 0.44, 0.48];
 
+// soft contact shadow: a dark radial disc on the board under a piece
+// (shadow maps band badly in software rendering; this never does)
+const blobGeo = new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2);
+const blobMat = new THREE.ShaderMaterial({
+  uniforms: { uOpacity: { value: 1 } },
+  vertexShader: 'varying vec2 vP; void main(){ vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform float uOpacity; varying vec2 vP; void main(){ float r = length(vP); gl_FragColor = vec4(0.0, 0.0, 0.0, 0.62 * uOpacity * smoothstep(1.0, 0.25, r)); }',
+  transparent: true, depthWrite: false,
+});
+export function contactShadow(radius) {
+  const m = new THREE.Mesh(blobGeo, blobMat);
+  m.scale.setScalar(radius);
+  m.position.y = 0.01;
+  m.renderOrder = 1;
+  return m;
+}
+export const CONTACT_MATERIAL = blobMat;
+
 // fade a realistic (lit) object in or out
 export function setOpacity(obj, a) {
+  CONTACT_MATERIAL.uniforms.uOpacity.value = a;
   obj.traverse((o) => {
     if (!o.material || o.material.isShaderMaterial) return;
     o.material.transparent = a < 0.999;

@@ -9,7 +9,7 @@ import { Piece } from './piece.js';
 import { L } from '../layout.js';
 import { S_OF } from '../curve.js';
 import { WINDOWS } from '../story.js';
-import { mulberry32, smoothstep, clamp, wrap, N_BARS } from '../time.js';
+import { mulberry32, smoothstep, clamp, wrap, N_BARS, Pchip } from '../time.js';
 
 export const P_C = 0.3116;
 const NX = 88, NZ = 88, NY = 44;
@@ -157,18 +157,16 @@ function meshIsland(isl) {
   return g;
 }
 
-// Catmull-Rom over keyed points [bar, Vector3] (b may run past N_BARS for the wrap)
+// Catmull-Rom through keyed points [bar, Vector3] (b may run past N_BARS for
+// the wrap). Bars map to the curve parameter through a monotone cubic, so the
+// camera's speed is continuous through every key, including the loop seam.
 function keyedSpline(keys) {
   const pts = keys.map((k) => k[1]);
-  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
-  const bars = keys.map((k) => k[0]);
+  const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);   // uniform: C1 in u
+  const map = new Pchip(keys.map((k) => k[0]), keys.map((_, i) => i / (keys.length - 1)));
   return (b) => {
-    // map bar -> curve parameter piecewise-linearly through the keys
-    let i = 0;
-    while (i < bars.length - 2 && b > bars[i + 1]) i++;
-    const t = clamp((b - bars[i]) / (bars[i + 1] - bars[i]));
-    const u = (i + t) / (bars.length - 1);
-    return { p: curve.getPoint(clamp(u)), u };
+    const u = clamp(map.at(b));
+    return { p: curve.getPoint(u), u };
   };
 }
 

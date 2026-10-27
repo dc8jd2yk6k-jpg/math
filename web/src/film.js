@@ -100,7 +100,9 @@ export class Film {
   blurSamples(b) {
     const db = 0.5 / FPS / BAR;          // 180-degree shutter
     const sp = this.rig.speed(b, db);
-    const px = (sp.ang + sp.lin / Math.max(5, sp.dist) * 0.6) * (this.H / 2) / Math.tan(THREE.MathUtils.degToRad(this.rig.cam.fov) / 2);
+    // a pure function of b: the fov comes from the pose at b, not from the camera's last state
+    const fov = this.rig.pose(b).fov;
+    const px = (sp.ang + sp.lin / Math.max(5, sp.dist) * 0.6) * (this.H / 2) / Math.tan(THREE.MathUtils.degToRad(fov) / 2);
     return Math.max(1, Math.min(8, Math.ceil(px / 5)));
   }
 

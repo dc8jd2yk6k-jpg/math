@@ -25,11 +25,15 @@ announced by the labs themselves and were still under independent review.
   which is Oct 27 in Asia. The film uses Oct 26.
 * **ETH date.** The film shows the discovery date (Oct 16) for both labs as a photo-finish "replay",
   with the announcement dates (Oct 26 / Oct 27) on the card.
-* **The curve.** The spine is real data, not an illustration. x is linear calendar time and y is the
+* **The line.** It is real data, not an illustration. x is linear calendar time and y is the
   cumulative count of the landmarks above, joined with monotone (PCHIP) interpolation. The hockey stick
   appears because the dates are what they are.
-* **The Lean code walls** show the Lean 4 statement of IMO 2024 P1. The tactic lines under it are
-  decorative texture, not a checked proof.
+* **The Lean card** types only the Lean 4 statement of IMO 2024 P1 (answer: α is an even
+  integer). The compute clock dramatizes the "up to 3 days per problem" constraint.
+* **IMO 2025 P2** is drawn from the official statement (circles Ω, Γ; points A–F; P the
+  circumcentre of ACD; H the orthocentre of PMN). The construction is computed exactly, and the
+  tangency of the line through H to circle BEF holds to ~1e-15
+  ([AoPS](https://artofproblemsolving.com/wiki/index.php/2025_IMO_Problems/Problem_2)).
 * **The Jacobian warp** is an illustrative polynomial deformation. It is not the published counterexample.
-* **Percolation** is a real simulation: bond percolation on an 11³ lattice at p = 0.2488 ≈ p_c(ℤ³),
-  with clusters found by union-find and coloured by size.
+* **Percolation** is a real simulation: bond percolation on a 10³ lattice at p = 0.2488 ≈ p_c(ℤ³),
+  with clusters found by union-find and the largest one lit.

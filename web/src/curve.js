@@ -175,8 +175,10 @@ export function spineOfYear(yr) {
 }
 
 // local frame at bar b: T (forward), N (up, in-plane), Z (side)
+// position on the true spine (where the trail and head really are); the axes
+// come from the smoothed spine so camera orientation has no curvature jumps
 export function frameAt(b) {
-  return { S: spineSmoothAt(b), T: tangentAt(b), N: normalAt(b), Z: Z.clone() };
+  return { S: spineAt(b), T: tangentAt(b), N: normalAt(b), Z: Z.clone() };
 }
 
 export const MILESTONE_BARS = MILESTONES.map((m) => m.bar);

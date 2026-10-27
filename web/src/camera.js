@@ -45,7 +45,7 @@ export class CameraRig {
     // seam pose: identical at b = 0 and b = 36 (loop)
     const SEAM = { back: 10, up: 1.6, ahead: 22, fov: 54 };
     this.shots = [
-      { b0: -1, t: 0, fn: (b) => rig(b, { ...SEAM, back: lerp(10, 15, e.inOutCubic(clamp(b / 1.6))), up: lerp(1.6, 3.5, e.inOutCubic(clamp(b / 1.6))), fov: lerp(54, 58, clamp(b / 1.6)) }) },
+      { b0: -1, t: 0, fn: (b) => { const k = e.inOutCubic(clamp(b / 1.6)); return rig(b, { ...SEAM, back: lerp(10, 15, k), up: lerp(1.6, 3.5, k), fov: lerp(54, 60, k), lookHead: 0.6 * smoothstep(0.05, 0.75, b) }); } },
       // reveal the chessboard: crane up and swing wide
       { b0: 1.55, t: 0.45, ease: 'inOutCubic', fn: (b) => around(A.chess, 2, { t: -20 + (b - 2) * 3.2, n: 20 + (b - 2) * 1.2, z: 30 - (b - 2) * 4, lt: 2 + (b - 2) * 1.5, ln: 2, fov: 42 }) },
       { b0: 3.75, t: 0.25, ease: 'inOutExpo', fn: (b) => around(A.chess, 2, { t: 15.5 + (b - 4) * 1.5, n: 2.6, z: -12 + (b - 4) * 4, lt: 0, ln: 7, lz: 0, fov: 46 }) },
@@ -71,7 +71,7 @@ export class CameraRig {
       // REVEAL: the whole curve, linear time
       { b0: 29.6, t: 1.6, ease: 'inOutQuart', fn: (b) => this.revealPose(b) },
       // DIVE back to the head: ends exactly on the seam pose
-      { b0: 34.0, t: 2.0, ease: 'inOutQuart', fn: (b) => rig(b, SEAM) },
+      { b0: 34.0, t: 1.3, ease: 'inOutCubic', fn: (b) => rig(b, SEAM) },   // lands at 35.3, then holds the loop pose
     ];
     this.cam = new THREE.PerspectiveCamera(54, 16 / 9, 0.05, 6000);
   }

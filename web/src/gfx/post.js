@@ -120,8 +120,6 @@ const COMPOSITE_FS = /* glsl */`
     col = aces(col);
     float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
     col = mix(vec3(l), col, uSat);
-    // a faint veil on top of the exposure spike
-    col = mix(col, uFlashColor, clamp(uFlash * 0.025, 0.0, 1.0));
     // vignette
     float vig = smoothstep(0.95, 0.25, length(cc * vec2(1.0, 0.82)));
     col *= mix(1.0, vig, uVignette);

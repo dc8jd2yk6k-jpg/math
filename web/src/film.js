@@ -19,7 +19,7 @@ import { clamp, smoothstep, envelope, keys, fract, Pchip, ease, lerp } from './u
 import { PALETTE } from './config.js';
 
 // bullet-time around the ETH photo finish: world motion slows, camera doesn't
-const WARP = new Pchip([-2, 25.6, 26.0, 27.0, 28.5, 30.5, 34, 40], [-2, 25.6, 25.97, 26.12, 26.45, 27.6, 34, 40]);
+const WARP = new Pchip([-2, 25.6, 26.0, 27.0, 28.5, 30.5, 33.2, 34.2, 35, 40], [-2, 25.6, 25.97, 26.12, 26.45, 27.6, 32.9, 34.2, 35, 40]);   // identity from bar 35 (loop seam)
 export const warp = (b) => WARP.at(b);
 
 const HITS = [   // [bar, strength] impulses for flash / CA / glitch / FOV punch

@@ -48,7 +48,7 @@ export class CameraRig {
       { b0: -1, t: 0, fn: (b) => rig(b, { ...SEAM, back: lerp(10, 15, e.inOutCubic(clamp(b / 1.6))), up: lerp(1.6, 3.5, e.inOutCubic(clamp(b / 1.6))), fov: lerp(54, 58, clamp(b / 1.6)) }) },
       // reveal the chessboard: crane up and swing wide
       { b0: 1.55, t: 0.45, ease: 'inOutCubic', fn: (b) => around(A.chess, 2, { t: -20 + (b - 2) * 3.2, n: 20 + (b - 2) * 1.2, z: 30 - (b - 2) * 4, lt: 2 + (b - 2) * 1.5, ln: 2, fov: 42 }) },
-      { b0: 3.75, t: 0.25, ease: 'inOutExpo', fn: (b) => around(A.chess, 2, { t: 8 + (b - 4) * 2, n: 11, z: -16 + (b - 4) * 3, lt: 0, ln: 4, lz: 0, fov: 40 }) },
+      { b0: 3.75, t: 0.25, ease: 'inOutExpo', fn: (b) => around(A.chess, 2, { t: 15.5 + (b - 4) * 1.5, n: 2.6, z: -12 + (b - 4) * 4, lt: 0, ln: 7, lz: 0, fov: 46 }) },
       // 19 years in one bar: dive into the helix tunnel
       { b0: 4.75, t: 0.25, ease: 'inOutExpo', fn: (b) => rig(b, { back: 13, up: 0.6, ahead: 30, fov: 74 }) },
       // Go board from above

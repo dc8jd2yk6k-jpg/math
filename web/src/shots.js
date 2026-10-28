@@ -106,12 +106,13 @@ export function shotKeys() {
   k(27.5, { focus: GOLD, az: -45, el: 26, dist: 52, roll: -4 });
   // 27.6–28.75: swing over to the parked head, hovering just above the canopy,
   // and push in on it; the line rises out of it into the sky
-  // and push in on it, looking down so it glows against the canopy
-  k(27.85, { focus: plus(NODE_P, 0, 1, 0), az: -35, el: 30, dist: 26, fov: 44, oy: 0, roll: 0 });
-  k(28.35, { focus: NODE_P, az: -22, el: 24, dist: 18, oy: 0.05 });
+  // and push in on it, looking down steeply enough that the canopy (not the sky
+  // past the island's edge) is behind it, so the red head glows against the green
+  k(27.85, { focus: plus(NODE_P, 0, 1, 0), az: -30, el: 50, dist: 22, fov: 44, oy: 0, roll: 0 });
+  k(28.35, { focus: NODE_P, az: -15, el: 46, dist: 16, oy: 0.05 });
   // 28.75–29.35: lift off with the head (the camera tilts up after it) as the sky
   // turns to space, then whip to the vortex
-  k(28.75, { focus: 'head', kappa: 1, az: -14, el: 14, dist: 20, oy: 0 });
+  k(28.75, { focus: 'head', kappa: 1, az: -12, el: 30, dist: 18, oy: 0 });
   k(29.1, { focus: 'head', az: -10, el: -8, dist: 30, fov: 46, oy: 0 });
   k(29.35, { focus: NSC, kappa: 0.3, az: -32, el: 14, dist: 52, fov: 40, oy: -0.08 });
   // ---- 29.5–31.625: Navier–Stokes. Push in as the tube tightens; the burst throws us back

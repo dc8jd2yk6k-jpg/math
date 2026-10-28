@@ -12,6 +12,7 @@ import { shotKeys } from './shots.js';
 import { Trail } from './world/trail.js';
 import { Head } from './world/head.js';
 import { Space } from './world/space.js';
+import { Particles } from './world/particles.js';
 import { Post } from './gfx/post.js';
 import { HUD } from './hud/hud.js';
 import { buildPieces } from './pieces/index.js';
@@ -49,9 +50,11 @@ export class Film {
     this.headAt = (b) => posAtS(headSAt(b));
     this.rig = new Rig(shotKeys(), this.headAt, { aspect: width / height });
     for (const p of this.pieces) if (p.buildCamera) for (const path of p.buildCamera(this.rig)) this.rig.addPath(path);
+    this.particles = new Particles(this);
+    scene.add(this.particles.root);
+    this.vp0 = new THREE.Matrix4(); this.vp1 = new THREE.Matrix4();
     this.post = new Post(r, width, height, { msaa });
     this.hud = new HUD(width, height, r);
-    this.prevVP = new THREE.Matrix4();
     this.stats = {};
     this.solids = SOLIDS;          // for tools/check_motion.mjs
   }
@@ -82,8 +85,9 @@ export class Film {
     return p ? p.worldWeight(b) : 0;
   }
 
-  // ---- everything that moves, at bar b (called per motion-blur sub-sample)
-  setTime(b) {
+  // ---- everything that moves, at bar b (called per motion-blur sub-sample;
+  // dt is the half-width of that sub-interval, for the particles' streaks)
+  setTime(b, dt = 0.25 / FPS / BAR) {
     b = wrap(b);
     const headS = headSAt(b);
     const headPos = posAtS(headS);
@@ -96,7 +100,10 @@ export class Film {
       this.fog.near = 70 + 600 * (1 - world) ** 2;
       this.fog.far = 300 + 3000 * (1 - world) ** 2;
     } else this.scene.fog = null;
-    this.space.update({ camera: cam, prevVP: this.prevVP, res: this.res, world, streak: 1 });
+    this.space.update({ camera: cam, res: this.res, world });
+    this.rig.viewProj(b - dt, this.vp0);
+    this.rig.viewProj(b + dt, this.vp1);
+    this.particles.update({ b, dt, camera: cam, vp0: this.vp0, vp1: this.vp1, res: this.res, world });
     const distToHead = cam.position.distanceTo(headPos);
     this.trail.update({ headS, camera: cam, res: this.res, gain: 1, redLen: Math.max(3, distToHead * 0.14) });
     const headGain = this.headGain ? this.headGain(b) : 1;
@@ -179,11 +186,9 @@ export class Film {
     const b = barOfFrame(frame);
     const n = this.blurSamples(b);
     const shutter = 0.5 / FPS / BAR;
-    // previous-frame view-projection for dust streaks (scratch camera; the main one is untouched)
-    this.rig.viewProj(b - 1 / FPS / BAR, this.prevVP);
     const aa = this.needAA ? this.needAA(b) : false;
-    const hdr = this.post.renderHDR(this.scene, this.rig.cam, n, (u) => this.setTime(b + (u - 0.5) * shutter), aa);
-    if (n > 1) this.setTime(b);
+    const hdr = this.post.renderHDR(this.scene, this.rig.cam, n, (u, w) => this.setTime(b + (u - 0.5) * shutter, 0.5 * w * shutter), aa);
+    if (n > 1) this.setTime(b, 0.5 * shutter);
     const bloom = this.post.bloom(hdr);
     this.hud.draw({ b, frame, camera: this.rig.cam, header: this.header(b, frame), labels: this.labels(b), axis: this.axis ? this.axis(b) : null });
     this.post.composite(hdr, bloom, this.hud.tex, { ...this.look(b), uFrame: frame % 1000 }, this.post.ldr);

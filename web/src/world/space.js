@@ -1,5 +1,5 @@
-// Black space: far stars, near dust that streaks with camera motion, soft
-// out-of-focus motes, and the daylight sky of the percolation island.
+// Black space: far stars, and the daylight sky of the percolation island.
+// The dust and the reactive swarm live in world/particles.js.
 import * as THREE from 'three';
 import { mulberry32 } from '../time.js';
 
@@ -12,7 +12,7 @@ export class Space {
 
     // far stars on a shell
     {
-      const n = 5200;
+      const n = 6000;
       const p = new Float32Array(n * 3), m = new Float32Array(n * 2);
       for (let i = 0; i < n; i++) {
         const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2, r = 5000 + rnd() * 2500;
@@ -39,69 +39,6 @@ export class Space {
       this.root.add(this.stars);
     }
 
-    // near dust: a box of particles that wraps around the camera and is drawn
-    // as streaks between the current and previous projected positions
-    {
-      const n = 2600, L = 1;
-      const seed = new Float32Array(n * 4 * 4), corner = new Float32Array(n * 4 * 2);
-      const idx = new Uint32Array(n * 6);
-      for (let i = 0; i < n; i++) {
-        const s = [rnd(), rnd(), rnd(), rnd()];
-        for (let k = 0; k < 4; k++) {
-          seed.set(s, (i * 4 + k) * 4);
-          corner.set([k >> 1, (k & 1) ? 1 : -1], (i * 4 + k) * 2);
-        }
-        const a = i * 4;
-        idx.set([a, a + 2, a + 1, a + 1, a + 2, a + 3], i * 6);
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 4 * 3), 3));
-      g.setAttribute('seed', new THREE.BufferAttribute(seed, 4));
-      g.setAttribute('corner', new THREE.BufferAttribute(corner, 2));
-      g.setIndex(new THREE.BufferAttribute(idx, 1));
-      this.dustMat = new THREE.ShaderMaterial({
-        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-        uniforms: {
-          uCam: { value: new THREE.Vector3() }, uBox: { value: 90 }, uPrevVP: { value: new THREE.Matrix4() },
-          uRes: { value: new THREE.Vector2(1080, 1920) }, uGain: { value: 1 }, uStreak: { value: 1 }, uSize: { value: 1 },
-        },
-        vertexShader: /* glsl */`
-          uniform vec3 uCam; uniform float uBox; uniform mat4 uPrevVP; uniform vec2 uRes; uniform float uStreak; uniform float uSize;
-          attribute vec4 seed; attribute vec2 corner;
-          varying float vA; varying vec2 vC; varying float vLen;
-          void main() {
-            vec3 rel = mod(seed.xyz * uBox - uCam + 0.5 * uBox, uBox) - 0.5 * uBox;
-            vec3 wp = uCam + rel;
-            vec4 c = projectionMatrix * viewMatrix * vec4(wp, 1.0);
-            vec4 p = uPrevVP * vec4(wp, 1.0);
-            float dist = length(rel);
-            float fadeBox = 1.0 - smoothstep(0.3 * uBox, 0.5 * uBox, dist);
-            vec2 sc = c.xy / max(c.w, 1e-3) * uRes * 0.5;
-            vec2 sp = p.xy / max(p.w, 1e-3) * uRes * 0.5;
-            vec2 v = (sc - sp) * uStreak;
-            float L = length(v);
-            if (p.w <= 0.0 || L > uRes.y) { v = vec2(0.0); L = 0.0; }
-            vec2 dir = L > 1e-3 ? v / L : vec2(1.0, 0.0);
-            vec2 nrm = vec2(-dir.y, dir.x);
-            float size = mix(1.2, 3.2, seed.w) * uSize * (uRes.x / 1080.0);
-            vec2 off = nrm * corner.y * size - dir * corner.x * L + dir * (corner.x * 2.0 - 1.0) * size * 0.5;
-            c.xy += off / (uRes * 0.5) * c.w;
-            gl_Position = c;
-            float energy = size / (size + L);
-            vA = fadeBox * (0.25 + 0.75 * seed.w) * smoothstep(0.5, 3.0, dist) * mix(1.0, energy, 0.65);
-            vC = vec2(corner.x, corner.y);
-            vLen = L;
-          }`,
-        fragmentShader: /* glsl */`
-          uniform float uGain; varying float vA; varying vec2 vC; varying float vLen;
-          void main() { float a = vA * (1.0 - abs(vC.y)) ; gl_FragColor = vec4(vec3(0.85, 0.88, 0.95) * a * uGain, 1.0); }`,
-      });
-      this.dust = new THREE.Mesh(g, this.dustMat);
-      this.dust.frustumCulled = false;
-      this.dust.renderOrder = -5;
-      this.root.add(this.dust);
-    }
-
     // daylight sky for the island world (a big inverted sphere, faded in by uWorld)
     this.skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, transparent: true,
@@ -126,13 +63,7 @@ export class Space {
     this.root.add(this.sky);
   }
 
-  update({ camera, prevVP, res, world = 0, dustGain = 1, starGain = 1, streak = 1 }) {
-    const d = this.dustMat.uniforms;
-    d.uCam.value.copy(camera.position);
-    d.uPrevVP.value.copy(prevVP);
-    d.uRes.value.copy(res);
-    d.uGain.value = dustGain * (1 - world);
-    d.uStreak.value = streak;
+  update({ camera, res, world = 0, starGain = 1 }) {
     this.stars.material.uniforms.uScale.value = res.x / 1080;
     this.stars.material.uniforms.uGain.value = starGain * (1 - world);
     this.sky.position.copy(camera.position);

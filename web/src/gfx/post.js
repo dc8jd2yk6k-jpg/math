@@ -168,7 +168,7 @@ export class Post {
     const r = this.r;
     if (n <= 1) {
       const rt = aa && this.sceneAA ? this.sceneAA : this.scene;
-      setSub(0.5);
+      setSub(0.5, 1);
       r.setRenderTarget(rt);
       r.setClearColor(0x000000, 1);
       r.clear(true, true, true);
@@ -179,7 +179,7 @@ export class Post {
     r.setClearColor(0x000000, 1);
     r.clear(true, false, false);
     for (let i = 0; i < n; i++) {
-      setSub((i + 0.5) / n);
+      setSub((i + 0.5) / n, 1 / n);        // (centre, width) of this sub-interval, as fractions of the shutter
       r.setRenderTarget(this.scene);
       r.clear(true, true, true);
       r.render(scene, camera);

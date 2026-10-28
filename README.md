@@ -5,14 +5,22 @@
 A 91.6-second vertical (1080 × 1920, 60 fps) motion film, rendered in real-time WebGL, cut to the
 Formula 1 theme and looping seamlessly.
 
-A red head draws a thin, luminous trail through black space. The trail is one curve in 3D: x is
-linear calendar time, and the height grows with every landmark result. A free chase camera follows
-the head. Early on the trail runs almost flat across the frame: Shannon in 1950, then the 47-year
-dash to Deep Blue. It tilts upward at AlphaGo, climbs through the IMO years, and from 2026 it is
-a vertical wall. Breakthroughs then arrive months, weeks and finally hours apart. Each milestone is
-an object threaded on the line, and each one stays there. The final pull-back shows the whole
-trajectory on a 1950–2026 axis: an exponential explosion. Then the camera dives into the floating
-voxel island on the wall, which is where the film began.
+It opens gliding low over a sunlit voxel forest toward a pillar of light. The camera yanks back:
+the forest is an island floating in black space, threaded on a luminous line, and a red head
+streaks down the line through it. The camera drops after the head and chases it back through time
+to 1950, where it slams to a stop inside Shannon's rings on the drum hit.
+
+From there the head draws the trail forward. The trail is one curve in 3D: x is linear calendar
+time, and the height grows with every landmark result. Early on it runs almost flat across the
+frame, from Shannon in 1950 through the 47-year dash to Deep Blue. It tilts upward at AlphaGo,
+climbs through the IMO years, and from 2026 it is a vertical wall. Breakthroughs then arrive
+months, weeks and finally hours apart.
+
+At every milestone the head **stops dead on the node**, on the downbeat, and holds perfectly
+still while the camera works the scene: an establishing shot, an orbital pan, a Dutch tilt, a
+close sweep. Then the head whips away. Each milestone is an object threaded on the line, and each
+one stays there. The final pull-back shows the whole trajectory on a 1950–2026 axis: an
+exponential explosion. Then the camera dives into the island, which is where the film began.
 
 ```
 1950 ──── 1997 ──── 2016 ── 2024.07 ─ 2025.07 ─ 05 ─ 07 ─ 08 ─ 09.08 ─ 10.06 ─ 10.26 ─ 10.27
@@ -43,9 +51,34 @@ The edit is built from your copy of Brian Tyler's *Formula 1 Theme* (110 BPM, ba
 It follows the reference film's cut: source bars 8–37½, then 41½–43½, then 47½–58. Every splice
 sits on the same chord on both sides. The loop seam (bar 58 → bar 8, both on D) is a crossfade with
 a reverb wash. Milestones land on downbeats: AlphaGo on the theme entry, the island on the climax
-drop, the pull-back on the breakdown. FOV punches and exposure kicks fire on brass hits detected in
-the audio. A synthesized sound layer adds whooshes on whips, booms on drops, a riser and a blow-up
-impact. The master is −14 LUFS.
+drop, the pull-back on the breakdown. Arrivals, departures and every camera move start and end on
+the sixteenth-note grid (`tools/sync_report.mjs`). Nothing shakes on the beat: the rhythm lives in
+the stops and whips, and only a few story moments get a smooth exposure swell. A synthesized sound
+layer adds whooshes on whips, booms on drops, a riser and a blow-up impact. The master is −14 LUFS.
+
+## Particles
+
+Space has three dust layers (near, mid and far), each a world-anchored tile wrapped around the
+camera, so every camera move gets true parallax at three depths. Each particle is drawn as a
+streak from where it is at the start of the current motion-blur sub-interval to where it is at the
+end, each end projected with the camera of its own instant. The trail is therefore the real
+relative motion of that particle.
+
+A 4,000-particle swarm belongs to the head. The head sheds it as a wake that follows its motion:
+a sparse halo when parked, a full comet wake when it flies. At each milestone part of the swarm
+flies in on curved, staggered paths and forms a figure:
+- Deep Blue: a burst of search rays from the king.
+- AlphaGo: a ring of light at Move 37.
+- IMO 2025: the three circles of Problem 2.
+- Erdős: the grid nodes.
+- Jacobian: three streams converging on the collision.
+
+Elsewhere the swarm acts out the story:
+- Percolation: it rains onto the island, one drop per opening site.
+- Navier–Stokes: it spirals into the vortex and is thrown out by the blow-up.
+- ETH: it lights both labs' paths, converges and bursts at the top.
+
+Shock fronts ripple through the dust.
 
 ## Run it
 
@@ -66,6 +99,9 @@ node render/render.mjs --scale 0.4 --step 2   # quick 432x768 / 30 fps preview
 node render/still.mjs out/ b26.5 t70 1234     # stills (bar, seconds or frame)
 node render/sheet.mjs sheet.png               # 1 fps contact sheet
 node tools/check_loop.mjs                     # seam continuity + determinism
+node tools/check_motion.mjs                   # camera speed / jerk / fov / clearance, every frame
+node tools/check_clearance.mjs                # the line never passes through a solid set piece
+node tools/sync_report.mjs                    # every cue against the grid and the music
 ```
 
 The soundtrack and the rendered MP4 are gitignored, because the music is copyrighted.
@@ -77,10 +113,11 @@ web/score.json        the timing score: edit segments and sound cues (bars)
 web/src/time.js       bar clock, PCHIP, periodic keyframe tracks, audio features
 web/src/data.js       milestones, the Game 6 FEN, Game 2 moves, Lean P1, the Jacobian map
 web/src/curve.js      the curve: linear time × stylized height, arc-length tables
-web/src/story.js      where the head is at every bar; header windows; the date clock
-web/src/shots.js      the shot list (az / el / dist / fov / screen offset per key)
-web/src/camera.js     one camera: monotone-cubic tracks (no overshoot, C1 across the loop) + path modes
-web/src/world/        the trail (constant-pixel ribbon), the head, stars / dust streaks / sky
+web/src/story.js      where the head is at every bar (arrive, hold, depart); header windows; the date
+web/src/layout.js     where each set piece sits relative to the line, and the solid volumes
+web/src/shots.js      the shot list (az / el / dist / fov / roll / screen offset per key)
+web/src/camera.js     orbit rig on monotone-cubic tracks + CameraPaths that join it with matched velocity
+web/src/world/        the trail (constant-pixel ribbon), the head, stars and sky, dust + swarm particles
 web/src/pieces/       one module per milestone
 web/src/gfx/          HDR post (motion-blur accumulation, bloom, ACES, CA, grain), screen-space lines, GPU YUV packing
 web/src/hud/          the header (rolling date, typed title, caption), 3D-pinned labels, axis
@@ -91,6 +128,13 @@ render/               static server, headless capture, chunked parallel x264 ren
 Everything on screen is a pure function of the bar position, so any frame can be rendered at any
 time, in any order, in parallel. The camera's parameters are monotone cubic tracks over keyframes,
 copied one loop before and after, so motion stays smooth across the seam and never overshoots.
+Designed flights are sampled from analytic curves:
+- the constant-zoom dive into the island;
+- the steady glide;
+- the jerk-limited yank back to space.
+
+Each flight starts and ends on the orbit camera's own position and velocity, so no hand-off can
+hitch.
 
 ## Credits
 
